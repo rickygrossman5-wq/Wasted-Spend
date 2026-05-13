@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AUTO Negative Mining — Amazon PPC</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f9f9f8; --surface: #ffffff; --surface2: #f2f1ef;
+    --border: rgba(0,0,0,0.10); --border2: rgba(0,0,0,0.16);
+    --text: #1a1a18; --text2: #5c5c58; --text3: #9a9a94;
+    --red: #d94040; --amber: #b06a12; --green: #1a8055;
+    --radius: 8px; --radius-lg: 12px;
+    --mono: 'DM Mono', monospace; --sans: 'DM Sans', sans-serif;
+  }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; min-height: 100vh; }
+  #root { min-height: 100vh; }
+  input, select, button { font-family: var(--sans); }
+  button { cursor: pointer; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+  table { border-collapse: collapse; width: 100%; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useMemo, useRef, useCallback } = React;
+
+const STOP = new Set(['and','for','only','the','a','an','of','to','in','on','with','by','at','from','or','vs','plus','than','then','also','as','is','are','be','it','&','that','this']);
+const AUTO_TYPES = new Set(['close-match','loose-match','substitutes','complements']);
+const ASIN_RE = /^b0[a-z0-9]{8}$/i;
+const AUD = new Set(['kids','baby','teen','girl','girls','boys','men','ladies','female','male','toddler','infant','children','womens','mens']);
+const SZE = new Set(['gallon','bulk','travel','mini','sample','pack','oversized','jumbo','wholesale','bundle']);
+const DIY = new Set(['diy','recipe','tutorial','homemade','refill','instructions']);
+const ING = new Set(['charcoal','salicylic','retinol','shea','caffeine','exfoliating','argan','collagen']);
+
+const fmt$  = n => '$' + Math.round(Math.abs(n||0)).toLocaleString();
+const fmtN  = n => (n < 0 ? '-$' : '$') + Math.round(Math.abs(n||0)).toLocaleString();
+const pct   = n => (+(n||0)).toFixed(2) + '%';
+const roasS = (s,sp) => sp > 0 ? (s/sp).toFixed(2)+'×' : '—';
+const shortC = s => { const p = String(s||'').split('|').map(x=>x.trim()); return p.length >= 3 ? p[1]+' · '+p[2] : String(s||'').slice(0,42); };
+
+function findCol(hdrs, terms) {
+  const hl = hdrs.map(h => String(h||'').toLowerCase());
+  for (const t of terms) { const i = hl.findIndex(h => h.includes(t)); if (i >= 0) return hdrs[i]; }
+  return null;
+}
+function tkz(text) {
+  const s = String(text||'').toLowerCase().replace(/[^a-z0-9\s]/g,' ');
+  const ws = s.split(/\s+/).filter(w => w.length > 1 && !STOP.has(w) && !ASIN_RE.test(w));
+  const bg = []; for (let i = 0; i < ws.length-1; i++) bg.push(ws[i]+' '+ws[i+1]);
+  return [...new Set([...ws,...bg])];
+}
+function buildProt(brand) {
+  const s = new Set(['sand','cloud','turkish','beach','towel','towels','bath','poncho','coverup','cover','hair','wrap','fouta']);
+  tkz(brand).forEach(w => s.add(w)); return s;
+}
+function parseFile(file, cb) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext === 'csv') {
+    Papa.parse(file, { header:true, skipEmptyLines:true, complete: r => cb(r.data, r.meta.fields||[]) });
+  } else {
+    const rd = new FileReader();
+    rd.onload = e => {
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws, {defval:''});
+      cb(data, data.length ? Object.keys(data[0]) : []);
+    };
+    rd.readAsArrayBuffer(file);
+  }
+}
+function normRows(data, hdrs) {
+  const g = (row,terms) => { const c = findCol(hdrs,terms); return c!=null ? String(row[c]||'').trim() : ''; };
+  return data.map(row => ({
+    targeting: g(row,['targeting type','targeting','auto type']).toLowerCase(),
+    matchType:  g(row,['match type']).toUpperCase().trim(),
+    searchTerm: g(row,['customer search term','search term']),
+    campaign:   g(row,['campaign name','campaign']),
+    spend:  parseFloat(g(row,['spend']))||0,
+    sales:  parseFloat(g(row,['7 day total sales','total sales','sales']))||0,
+    orders: parseFloat(g(row,['7 day total orders','total orders','orders']))||0,
+    clicks: parseFloat(g(row,['clicks']))||0,
+  })).filter(r => r.searchTerm && r.campaign);
+}
+function exportCSV(data, fn) {
+  if (!data.length) return;
+  const cols = Object.keys(data[0]);
+  const rows = [cols.join(','), ...data.map(r => cols.map(c => { const v = String(r[c]??''); return (v.includes(',')||v.includes('"')) ? `"${v.replace(/"/g,'""')}"` : v; }).join(','))];
+  const b = new Blob([rows.join('\n')], {type:'text/csv'});
+  const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href=u; a.download=fn; a.click(); URL.revokeObjectURL(u);
+}
+
+// shared negation candidate engine
+function buildCands(subset, prot, cfg, totalSpend) {
+  const { MIN_WASTED, MIN_OCC, TOP_N } = cfg;
+  const conv = subset.filter(r=>r.orders>0);
+  const cN = conv.length, cS = conv.reduce((s,r)=>s+r.sales,0);
+  const cts={}, sal={};
+  conv.forEach(r=>{const seen=new Set();r._t.forEach(t=>{if(!seen.has(t)){seen.add(t);cts[t]=(cts[t]||0)+1;sal[t]=(sal[t]||0)+r.sales;}});});
+  const top5 = new Set(Object.entries(cts).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([t])=>t));
+  const dynP = new Set(top5);
+  Object.entries(cts).forEach(([t,c])=>{if(cN>0&&c/cN>=0.20)dynP.add(t);});
+  Object.entries(sal).forEach(([t,s])=>{if(cS>0&&s/cS>=0.05)dynP.add(t);});
+  const isProt = tok => {
+    const t=tok.toLowerCase(); if(t.length<=3)return true;
+    if(prot.has(t)||dynP.has(t))return true;
+    for(const w of t.split(' ')) if(prot.has(w)||dynP.has(w))return true;
+    return false;
+  };
+  const byCamp={};
+  subset.forEach(r=>{(byCamp[r.campaign]=byCamp[r.campaign]||[]).push(r);});
+  const arr=[];
+  Object.entries(byCamp).forEach(([camp,cRs])=>{
+    const cc=cRs.filter(r=>r.orders>0),ccN=cc.length;
+    const cw=cRs.filter(r=>r.orders===0);
+    const tks=new Set(); cw.forEach(r=>r._t.forEach(t=>tks.add(t)));
+    tks.forEach(tok=>{
+      if(isProt(tok))return;
+      const wr=cw.filter(r=>r._s.has(tok)); const o0=wr.length; if(o0<MIN_OCC)return;
+      const ws=wr.reduce((s,r)=>s+r.spend,0); if(ws<MIN_WASTED)return;
+      const cr=cc.filter(r=>r._s.has(tok)); const ov=ccN>0?cr.length/ccN*100:0; if(ov>2)return;
+      const cs=cr.reduce((s,r)=>s+r.sales,0),csp=cr.reduce((s,r)=>s+r.spend,0);
+      const ni=(cs-csp)-ws; if(ni>0)return;
+      const ws2=new Set(tok.split(' ')); let sm=1.0;
+      if([...ws2].some(w=>AUD.has(w)))sm=1.50;
+      else if([...ws2].some(w=>DIY.has(w)))sm=1.40;
+      else if([...ws2].some(w=>SZE.has(w)))sm=1.30;
+      else if([...ws2].some(w=>ING.has(w)))sm=1.30;
+      const nm=ov===0?1.40:0.80;
+      const as=(ws/Math.max(totalSpend,1))*Math.log1p(o0)*sm*nm;
+      const mr=(tok.split(' ').length>1&&[...ws2].some(w=>prot.has(w)))?'EXACT':'PHRASE';
+      const ev=[...wr].sort((a,b)=>b.spend-a.spend).slice(0,3).map(r=>({t:r.searchTerm,s:r.spend}));
+      arr.push({camp,tok,occ:cRs.filter(r=>r._s.has(tok)).length,o0,ws,ov,ni,mr,ev,as});
+    });
+  });
+  return arr.sort((a,b)=>b.as-a.as).slice(0,TOP_N).map((c,i)=>({...c,rank:i+1}));
+}
+
+function runAutoAnalysis(rows, prot, cfg) {
+  const { LOW_ROAS, TOP_N } = cfg;
+  const auto = rows.filter(r=>AUTO_TYPES.has(r.targeting)).map(r=>({...r,_t:tkz(r.searchTerm)}));
+  auto.forEach(r=>{r._s=new Set(r._t);});
+  if(!auto.length) return null;
+  const tSp=auto.reduce((s,r)=>s+r.spend,0);
+  const wasted=auto.filter(r=>r.orders===0); const wastedSp=wasted.reduce((s,r)=>s+r.spend,0);
+  const conv=auto.filter(r=>r.orders>0);
+  const lr=conv.filter(r=>r.spend>0&&r.sales/r.spend<LOW_ROAS);
+  const wbt={}; AUTO_TYPES.forEach(t=>{wbt[t]={sp:0,ws:0};});
+  auto.forEach(r=>{if(wbt[r.targeting]){wbt[r.targeting].sp+=r.spend;if(r.orders===0)wbt[r.targeting].ws+=r.spend;}});
+  const wasteByType=Object.entries(wbt).map(([tp,d])=>({tp,...d,wpct:wastedSp>0?d.ws/wastedSp*100:0,spct:tSp>0?d.sp/tSp*100:0})).sort((a,b)=>b.sp-a.sp);
+  return {
+    snap:{tSp,orders:auto.reduce((s,r)=>s+r.orders,0),wastedSp,wastedPct:tSp>0?wastedSp/tSp*100:0,lrSp:lr.reduce((s,r)=>s+r.spend,0),lrN:lr.length,lrPct:tSp>0?lr.reduce((s,r)=>s+r.spend,0)/tSp*100:0,wasteByType,N:auto.length},
+    topWasted:[...wasted].sort((a,b)=>b.spend-a.spend).slice(0,TOP_N),
+    cands:buildCands(auto,prot,cfg,tSp),
+    tokens:runTokenImpact(auto,prot),
+    autoRows:auto,
+  };
+}
+
+function runTokenImpact(rows, prot) {
+  const conv = rows.filter(r=>r.orders>0);
+  const cN = conv.length;
+
+  // build dynamic protection same way as buildCands
+  const cS = conv.reduce((s,r)=>s+r.sales,0);
+  const cts={}, sal={};
+  conv.forEach(r=>{const seen=new Set();r._t.forEach(t=>{if(!seen.has(t)){seen.add(t);cts[t]=(cts[t]||0)+1;sal[t]=(sal[t]||0)+r.sales;}});});
+  const top5=new Set(Object.entries(cts).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([t])=>t));
+  const dynP=new Set(top5);
+  Object.entries(cts).forEach(([t,c])=>{if(cN>0&&c/cN>=0.20)dynP.add(t);});
+  Object.entries(sal).forEach(([t,s])=>{if(cS>0&&s/cS>=0.05)dynP.add(t);});
+
+  const isProt = tok => {
+    const t=tok.toLowerCase(); if(t.length<=3)return true;
+    if(prot.has(t)||dynP.has(t))return true;
+    for(const w of t.split(' ')) if(prot.has(w)||dynP.has(w))return true;
+    return false;
+  };
+
+  // aggregate stats per token across all rows
+  const st={};
+  rows.forEach(r=>{
+    const seen=new Set();
+    r._t.forEach(tok=>{
+      if(seen.has(tok)||isProt(tok))return;
+      seen.add(tok);
+      if(!st[tok])st[tok]={occ:0,wSp:0,cSal:0,cSp:0,cOrd:0,cRows:0};
+      st[tok].occ++;
+      if(r.orders===0) st[tok].wSp+=r.spend;
+      else { st[tok].cSal+=r.sales; st[tok].cSp+=r.spend; st[tok].cOrd+=r.orders; st[tok].cRows++; }
+    });
+  });
+
+  const MIN_UNI=5, MIN_PH=3;
+  const tokens = Object.entries(st).map(([tok,d])=>{
+    const isP=tok.includes(' ');
+    if(d.occ<(isP?MIN_PH:MIN_UNI))return null;
+    const surplus=d.cSal-d.cSp;
+    const netImpact=surplus-d.wSp;
+    const tRoas=(d.cSp+d.wSp)>0?d.cSal/(d.cSp+d.wSp):0;
+    const cOverlap=cN>0?d.cRows/cN*100:0;
+    return{tok,isP,...d,surplus,netImpact,tRoas,cOverlap};
+  }).filter(Boolean);
+
+  const uni=tokens.filter(t=>!t.isP);
+  const ph=tokens.filter(t=>t.isP);
+  return{
+    worstUni:[...uni].sort((a,b)=>a.netImpact-b.netImpact).slice(0,20),
+    bestUni: [...uni].sort((a,b)=>b.netImpact-a.netImpact).slice(0,20),
+    worstPh: [...ph].sort((a,b)=>a.netImpact-b.netImpact).slice(0,20),
+    bestPh:  [...ph].sort((a,b)=>b.netImpact-a.netImpact).slice(0,20),
+  };
+}
+
+function runPartB(rows, prot, cfg, matchType) {
+  const { TOP_N } = cfg;
+  const sub = rows.filter(r=>r.matchType===matchType).map(r=>({...r,_t:tkz(r.searchTerm)}));
+  sub.forEach(r=>{r._s=new Set(r._t);});
+  if(!sub.length) return null;
+  const tSp=sub.reduce((s,r)=>s+r.spend,0);
+  const wasted=sub.filter(r=>r.orders===0);
+  return {
+    N:sub.length, tSp,
+    topWasted:[...wasted].sort((a,b)=>b.spend-a.spend).slice(0,TOP_N),
+    cands:buildCands(sub,prot,cfg,tSp),
+  };
+}
+
+function useSort(data,dc,dd='desc'){
+  const [col,setCol]=useState(dc); const [dir,setDir]=useState(dd);
+  const sorted=useMemo(()=>{
+    if(!data||!data.length)return data||[];
+    return [...data].sort((a,b)=>{let av=a[col],bv=b[col];if(typeof av==='string'){av=av.toLowerCase();bv=String(bv).toLowerCase();}return dir==='asc'?(av>bv?1:-1):(av<bv?1:-1);});
+  },[data,col,dir]);
+  const toggle=c=>{if(c===col)setDir(d=>d==='asc'?'desc':'asc');else{setCol(c);setDir('desc');}};
+  return{sorted,col,dir,toggle};
+}
+
+const BM={'close-match':['#dbeafe','#1e40af'],'loose-match':['#ffedd5','#9a3412'],substitutes:['#fae8ff','#6b21a8'],complements:['#dcfce7','#166534'],PHRASE:['#dbeafe','#1d4ed8'],EXACT:['#fef9c3','#854d0e'],BROAD:['#ffedd5','#9a3412']};
+const Badge=({v})=>{const[bg,tx]=BM[v]||['#f1f0ee','#5c5c58'];return <span style={{display:'inline-block',padding:'2px 8px',borderRadius:4,fontSize:11,fontWeight:600,background:bg,color:tx,whiteSpace:'nowrap'}}>{v}</span>;};
+const TH=({l,c,sc,sd,tg,w})=><th onClick={()=>c&&tg(c)} style={{padding:'8px 10px',fontWeight:500,fontSize:11,color:'var(--text2)',whiteSpace:'nowrap',cursor:c?'pointer':'default',userSelect:'none',borderBottom:'1px solid var(--border)',background:'var(--surface2)',textAlign:'left',width:w}}>{l}{c===sc&&<span style={{marginLeft:3,opacity:.5}}>{sd==='asc'?'↑':'↓'}</span>}</th>;
+const TD=({v,sx={}})=><td style={{padding:'7px 10px',fontSize:12,borderBottom:'1px solid var(--border)',verticalAlign:'top',...sx}}>{v}</td>;
+const Btn=({onClick,children})=><button onClick={onClick} style={{fontSize:11,padding:'5px 12px',border:'1px solid var(--border2)',borderRadius:'var(--radius)',background:'var(--surface)',color:'var(--text2)',cursor:'pointer'}}>{children}</button>;
+
+function SnapshotTab({snap}){
+  const{tSp,orders,wastedSp,wastedPct,lrSp,lrN,lrPct,wasteByType}=snap;
+  return(
+    <div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:12,marginBottom:24}}>
+        {[['Total AUTO spend',fmt$(tSp),null,null],['Total orders',orders.toLocaleString(),null,null],['Wasted spend',fmt$(wastedSp),pct(wastedPct)+' of AUTO spend','var(--red)'],['Low-ROAS spend (<1.0×)',fmt$(lrSp),lrN+' terms · '+pct(lrPct),'var(--amber)']].map(([l,v,s,a])=>(
+          <div key={l} style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'var(--radius)',padding:'14px 16px'}}>
+            <div style={{fontSize:11,color:'var(--text3)',marginBottom:4,textTransform:'uppercase',letterSpacing:'.04em'}}>{l}</div>
+            <div style={{fontSize:22,fontWeight:500,fontFamily:'var(--mono)',color:a||'var(--text)'}}>{v}</div>
+            {s&&<div style={{fontSize:11,color:'var(--text3)',marginTop:3}}>{s}</div>}
+          </div>
+        ))}
+      </div>
+      <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'18px 20px'}}>
+        <div style={{fontSize:11,fontWeight:500,color:'var(--text2)',marginBottom:16,textTransform:'uppercase',letterSpacing:'.05em'}}>Waste by AUTO type</div>
+        {wasteByType.map((r,i)=>(
+          <div key={r.tp} style={{marginBottom:i<wasteByType.length-1?14:0}}>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}>
+              <span style={{display:'flex',alignItems:'center',gap:8}}><Badge v={r.tp}/><span style={{fontFamily:'var(--mono)',fontWeight:500,fontSize:13}}>{fmt$(r.ws)}</span></span>
+              <span style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}}>{pct(r.wpct)} of waste · {pct(r.spct)} of spend</span>
+            </div>
+            <div style={{height:6,background:'var(--surface2)',borderRadius:3}}><div style={{height:6,width:Math.min(r.wpct,100)+'%',background:'var(--red)',borderRadius:3}}/></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function WastedTab({topWasted,showType,exportName}){
+  const rows=useMemo(()=>topWasted.map((r,i)=>({...r,rank:i+1})),[topWasted]);
+  const{sorted,col,dir,toggle}=useSort(rows,'rank','asc');
+  return(
+    <div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+        <span style={{fontSize:12,color:'var(--text3)'}}>{rows.length} terms · 0 orders</span>
+        <Btn onClick={()=>exportCSV(sorted.map(r=>({rank:r.rank,campaign:r.campaign,auto_type:r.targeting,match_type:r.matchType,search_term:r.searchTerm,spend:r.spend,clicks:r.clicks,orders:0})),exportName)}>↓ Export CSV</Btn>
+      </div>
+      <div style={{overflowX:'auto',borderRadius:'var(--radius)',border:'1px solid var(--border)'}}>
+        <table>
+          <thead><tr>
+            <TH l="#"           c="rank"       sc={col} sd={dir} tg={toggle} w={36}/>
+            <TH l="Campaign"    c="campaign"   sc={col} sd={dir} tg={toggle} w={160}/>
+            {showType&&<TH l="Auto type" c="targeting" sc={col} sd={dir} tg={toggle} w={110}/>}
+            <TH l="Search term" c="searchTerm" sc={col} sd={dir} tg={toggle}/>
+            <TH l="Spend"       c="spend"      sc={col} sd={dir} tg={toggle} w={80}/>
+            <TH l="Clicks"      c="clicks"     sc={col} sd={dir} tg={toggle} w={60}/>
+            <TH l="ROAS"        c={null}       sc={col} sd={dir} tg={toggle} w={60}/>
+          </tr></thead>
+          <tbody>
+            {sorted.map((r,i)=>(
+              <tr key={i} style={{background:i%2?'var(--surface2)':'var(--surface)'}}>
+                <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}} v={r.rank}/>
+                <TD sx={{fontSize:11,color:'var(--text2)',maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} v={<span title={r.campaign}>{shortC(r.campaign)}</span>}/>
+                {showType&&<TD v={<Badge v={r.targeting}/>}/>}
+                <TD sx={{fontSize:12,wordBreak:'break-word'}} v={r.searchTerm}/>
+                <TD sx={{fontFamily:'var(--mono)',color:'var(--red)',fontWeight:500}} v={fmt$(r.spend)}/>
+                <TD sx={{fontFamily:'var(--mono)',fontSize:11}} v={r.clicks}/>
+                <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}} v={roasS(r.sales,r.spend)}/>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function CandsTab({cands,exportName}){
+  const camps=useMemo(()=>[...new Set(cands.map(c=>c.camp))],[cands]);
+  const[filter,setFilter]=useState('all');
+  const[expanded,setExpanded]=useState(null);
+  const filtered=useMemo(()=>filter==='all'?cands:cands.filter(c=>c.camp===filter),[cands,filter]);
+  const{sorted,col,dir,toggle}=useSort(filtered,'rank','asc');
+  if(!cands.length)return(
+    <div style={{padding:56,textAlign:'center',color:'var(--text3)',fontSize:13,lineHeight:2}}>
+      No negation candidates meet the current thresholds.<br/>
+      <span style={{fontSize:12}}>Try lowering Min Wasted Spend or Min Occurrences in Config ⚙</span>
+    </div>
+  );
+  return(
+    <div>
+      <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:12,flexWrap:'wrap'}}>
+        <span style={{fontSize:12,color:'var(--text2)'}}>Campaign:</span>
+        <select value={filter} onChange={e=>{setFilter(e.target.value);setExpanded(null);}} style={{fontSize:11,padding:'5px 10px',border:'1px solid var(--border2)',borderRadius:'var(--radius)',background:'var(--surface)',color:'var(--text)',outline:'none'}}>
+          <option value="all">All campaigns ({cands.length} candidates)</option>
+          {camps.map(c=><option key={c} value={c}>{shortC(c)}</option>)}
+        </select>
+        <div style={{marginLeft:'auto',display:'flex',gap:8,alignItems:'center'}}>
+          <span style={{fontSize:11,color:'var(--text3)'}}>{filtered.length} shown</span>
+          <Btn onClick={()=>exportCSV(sorted.map(r=>({rank:r.rank,campaign:r.camp,token:r.tok,occurrences:r.occ,occ_0_order:r.o0,wasted_spend:Math.round(r.ws),conv_overlap_pct:r.ov.toFixed(2),net_impact:Math.round(r.ni),match_type:r.mr,evidence:r.ev.map(e=>e.t).join(' | ')})),exportName)}>↓ Export CSV</Btn>
+        </div>
+      </div>
+      <div style={{overflowX:'auto',borderRadius:'var(--radius)',border:'1px solid var(--border)'}}>
+        <table>
+          <thead><tr>
+            <TH l="#"          c="rank" sc={col} sd={dir} tg={toggle} w={32}/>
+            <TH l="Campaign"   c="camp" sc={col} sd={dir} tg={toggle} w={140}/>
+            <TH l="Token"      c="tok"  sc={col} sd={dir} tg={toggle} w={105}/>
+            <TH l="Occ"        c="occ"  sc={col} sd={dir} tg={toggle} w={44}/>
+            <TH l="0-ord"      c="o0"   sc={col} sd={dir} tg={toggle} w={48}/>
+            <TH l="Wasted $"   c="ws"   sc={col} sd={dir} tg={toggle} w={82}/>
+            <TH l="Conv %"     c="ov"   sc={col} sd={dir} tg={toggle} w={62}/>
+            <TH l="Net impact" c="ni"   sc={col} sd={dir} tg={toggle} w={88}/>
+            <TH l="Match"      c="mr"   sc={col} sd={dir} tg={toggle} w={62}/>
+            <TH l="Evidence"   c={null} sc={col} sd={dir} tg={toggle}/>
+          </tr></thead>
+          <tbody>
+            {sorted.map((r,i)=>{
+              const isExp=expanded===i;
+              return(
+                <tr key={i} onClick={()=>setExpanded(isExp?null:i)} style={{background:i%2?'var(--surface2)':'var(--surface)',cursor:'pointer'}} title="Click to expand evidence">
+                  <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}} v={r.rank}/>
+                  <TD sx={{fontSize:11,color:'var(--text2)',maxWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} v={<span title={r.camp}>{shortC(r.camp)}</span>}/>
+                  <TD sx={{fontWeight:500,fontSize:12}} v={r.tok}/>
+                  <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right'}} v={r.occ}/>
+                  <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right'}} v={r.o0}/>
+                  <TD sx={{fontFamily:'var(--mono)',color:'var(--red)',fontWeight:500}} v={fmt$(r.ws)}/>
+                  <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:r.ov===0?'var(--green)':'var(--amber)'}} v={pct(r.ov)}/>
+                  <TD sx={{fontFamily:'var(--mono)',color:'var(--red)',fontWeight:500}} v={fmtN(r.ni)}/>
+                  <TD v={<Badge v={r.mr}/>}/>
+                  <TD sx={{fontSize:11,color:'var(--text2)',lineHeight:1.7}} v={isExp ? r.ev.map((e,j)=><div key={j}>"{e.t.slice(0,52)}" <span style={{fontFamily:'var(--mono)',color:'var(--red)'}}>{fmt$(e.s)}</span></div>) : <span style={{color:'var(--text3)'}}>↓ expand</span>}/>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div style={{fontSize:11,color:'var(--text3)',marginTop:6,textAlign:'right'}}>Click any row to expand evidence queries</div>
+    </div>
+  );
+}
+
+const TOKEN_VIEWS = [
+  {id:'worstUni', label:'Worst unigrams',  help:'Highest waste, lowest net impact'},
+  {id:'bestUni',  label:'Best unigrams',   help:'Highest net impact tokens'},
+  {id:'worstPh',  label:'Worst phrases',   help:'Highest waste bigrams'},
+  {id:'bestPh',   label:'Best phrases',    help:'Highest net impact bigrams'},
+];
+
+function TokenImpactTab({tokens}){
+  const[view,setView]=useState('worstUni');
+  const isWorst=view.startsWith('worst');
+  const rows=useMemo(()=>(tokens[view]||[]).map((r,i)=>({...r,rank:i+1})),[tokens,view]);
+  const{sorted,col,dir,toggle}=useSort(rows,'rank','asc');
+
+  return(
+    <div>
+      {/* view switcher */}
+      <div style={{display:'flex',gap:6,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
+        {TOKEN_VIEWS.map(v=>(
+          <button key={v.id} onClick={()=>setView(v.id)} title={v.help}
+            style={{fontSize:11,padding:'5px 13px',borderRadius:'var(--radius)',border:'1px solid var(--border2)',background:view===v.id?'var(--text)':'var(--surface)',color:view===v.id?'var(--bg)':'var(--text2)',cursor:'pointer',fontWeight:view===v.id?500:400,transition:'all .1s'}}>
+            {v.label}
+            <span style={{marginLeft:5,opacity:.6,fontFamily:'var(--mono)',fontSize:10}}>{(tokens[v.id]||[]).length}</span>
+          </button>
+        ))}
+        <div style={{marginLeft:'auto'}}>
+          <Btn onClick={()=>exportCSV(sorted.map(r=>({rank:r.rank,token:r.tok,occurrences:r.occ,wasted_spend:Math.round(r.wSp),conv_sales:Math.round(r.cSal),conv_spend:Math.round(r.cSp),conv_orders:r.cOrd,surplus:Math.round(r.surplus),net_impact:Math.round(r.netImpact),token_roas:r.tRoas>0?r.tRoas.toFixed(2):'0',conv_overlap_pct:r.cOverlap.toFixed(2)})),`token_impact_${view}.csv`)}>↓ Export CSV</Btn>
+        </div>
+      </div>
+
+      {/* summary callout */}
+      {rows.length>0&&(
+        <div style={{marginBottom:14,padding:'10px 14px',background:isWorst?'#fff5f5':'#f0fdf4',border:`1px solid ${isWorst?'#fecaca':'#bbf7d0'}`,borderRadius:'var(--radius)',fontSize:12,color:isWorst?'var(--red)':'var(--green)'}}>
+          {isWorst
+            ? `Top offender: "${rows[0].tok}" — ${fmtN(rows[0].netImpact)} net impact across ${rows[0].occ} queries`
+            : `Top contributor: "${rows[0].tok}" — ${fmtN(rows[0].netImpact)} net impact across ${rows[0].occ} queries`}
+        </div>
+      )}
+
+      {rows.length===0&&(
+        <div style={{padding:48,textAlign:'center',color:'var(--text3)',fontSize:13}}>No tokens meet the minimum occurrence threshold for this view.</div>
+      )}
+
+      {rows.length>0&&(
+        <div style={{overflowX:'auto',borderRadius:'var(--radius)',border:'1px solid var(--border)'}}>
+          <table>
+            <thead><tr>
+              <TH l="#"            c="rank"      sc={col} sd={dir} tg={toggle} w={32}/>
+              <TH l="Token"        c="tok"       sc={col} sd={dir} tg={toggle} w={120}/>
+              <TH l="Occ"          c="occ"       sc={col} sd={dir} tg={toggle} w={52}/>
+              <TH l="Wasted $"     c="wSp"       sc={col} sd={dir} tg={toggle} w={82}/>
+              <TH l="Conv sales"   c="cSal"      sc={col} sd={dir} tg={toggle} w={92}/>
+              <TH l="Conv spend"   c="cSp"       sc={col} sd={dir} tg={toggle} w={90}/>
+              <TH l="Conv orders"  c="cOrd"      sc={col} sd={dir} tg={toggle} w={90}/>
+              <TH l="Surplus"      c="surplus"   sc={col} sd={dir} tg={toggle} w={82}/>
+              <TH l="Net impact"   c="netImpact" sc={col} sd={dir} tg={toggle} w={88}/>
+              <TH l="Token ROAS"   c="tRoas"     sc={col} sd={dir} tg={toggle} w={88}/>
+              <TH l="Conv overlap" c="cOverlap"  sc={col} sd={dir} tg={toggle} w={94}/>
+            </tr></thead>
+            <tbody>
+              {sorted.map((r,i)=>(
+                <tr key={i} style={{background:i%2?'var(--surface2)':'var(--surface)'}}>
+                  <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}} v={r.rank}/>
+                  <TD sx={{fontWeight:500,fontSize:12}} v={r.tok}/>
+                  <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right'}} v={r.occ}/>
+                  <TD sx={{fontFamily:'var(--mono)',color:'var(--red)',fontWeight:500}} v={r.wSp>0?fmt$(r.wSp):'—'}/>
+                  <TD sx={{fontFamily:'var(--mono)',color:'var(--green)'}} v={r.cSal>0?fmt$(r.cSal):'—'}/>
+                  <TD sx={{fontFamily:'var(--mono)'}} v={r.cSp>0?fmt$(r.cSp):'—'}/>
+                  <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right'}} v={r.cOrd||'—'}/>
+                  <TD sx={{fontFamily:'var(--mono)',color:r.surplus>=0?'var(--green)':'var(--red)',fontWeight:500}} v={fmtN(r.surplus)}/>
+                  <TD sx={{fontFamily:'var(--mono)',color:r.netImpact>=0?'var(--green)':'var(--red)',fontWeight:600}} v={fmtN(r.netImpact)}/>
+                  <TD sx={{fontFamily:'var(--mono)'}} v={r.tRoas>0?r.tRoas.toFixed(2)+'×':'—'}/>
+                  <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text2)'}} v={pct(r.cOverlap)}/>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div style={{fontSize:11,color:'var(--text3)',marginTop:8,lineHeight:1.6}}>
+        Protected tokens (brand, core product terms, top converters) are excluded. Min occurrences: unigrams ≥ 5, phrases ≥ 3.
+      </div>
+    </div>
+  );
+}
+
+function ConfigPanel({cfg,setCfg,onClose}){
+  const[loc,setLoc]=useState({...cfg});
+  const fields=[
+    {k:'MIN_WASTED',l:'Min wasted spend ($)',min:5,max:100,step:5,d:'Minimum 0-order spend to flag a token'},
+    {k:'MIN_OCC',l:'Min 0-order occurrences',min:2,max:20,step:1,d:'Minimum wasted query count per token'},
+    {k:'LOW_ROAS',l:'Low-ROAS cutoff (×)',min:0.1,max:3,step:0.1,d:'ROAS below this = low-ROAS spend (snapshot)'},
+    {k:'TOP_N',l:'Top N results',min:10,max:50,step:5,d:'Max rows per output table'},
+  ];
+  return(
+    <div style={{position:'fixed',top:0,right:0,height:'100%',width:300,background:'var(--surface)',borderLeft:'1px solid var(--border2)',zIndex:100,padding:24,overflowY:'auto',boxShadow:'-4px 0 24px rgba(0,0,0,.08)'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:24}}>
+        <span style={{fontWeight:500,fontSize:15}}>Configuration</span>
+        <button onClick={onClose} style={{background:'none',border:'none',fontSize:20,color:'var(--text3)',cursor:'pointer',lineHeight:1}}>×</button>
+      </div>
+      {fields.map(f=>(
+        <div key={f.k} style={{marginBottom:20}}>
+          <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+            <label style={{fontSize:12,fontWeight:500}}>{f.l}</label>
+            <span style={{fontFamily:'var(--mono)',fontSize:12,color:'var(--text2)'}}>{loc[f.k]}</span>
+          </div>
+          <input type="range" min={f.min} max={f.max} step={f.step} value={loc[f.k]} onChange={e=>setLoc(v=>({...v,[f.k]:+e.target.value}))} style={{width:'100%',accentColor:'var(--text)',marginBottom:4}}/>
+          <div style={{fontSize:11,color:'var(--text3)'}}>{f.d}</div>
+        </div>
+      ))}
+      <div style={{display:'flex',gap:8,marginTop:24}}>
+        <button onClick={()=>{setCfg(loc);onClose();}} style={{flex:1,padding:'9px 0',background:'var(--text)',color:'var(--bg)',border:'none',borderRadius:'var(--radius)',fontWeight:500,fontSize:13,cursor:'pointer'}}>Apply & rerun</button>
+        <button onClick={onClose} style={{flex:1,padding:'9px 0',background:'transparent',border:'1px solid var(--border2)',borderRadius:'var(--radius)',fontSize:13,cursor:'pointer',color:'var(--text2)'}}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+const SECTIONS=[
+  {id:'auto',   label:'AUTO',            tabs:[{id:'snapshot',label:'Snapshot'},{id:'wasted',label:'Wasted terms'},{id:'cands',label:'Negation candidates'},{id:'tokens',label:'Token impact'}]},
+  {id:'phrase', label:'Phrase (Part B)', tabs:[{id:'wasted',label:'Wasted terms'},{id:'cands',label:'Negation candidates'}]},
+  {id:'broad',  label:'Broad (Part B)',  tabs:[{id:'wasted',label:'Wasted terms'},{id:'cands',label:'Negation candidates'}]},
+];
+
+function Empty({msg}){
+  return <div style={{padding:64,textAlign:'center',color:'var(--text3)',fontSize:13,lineHeight:2}}>{msg}<br/><span style={{fontSize:12}}>This report may not contain rows with this match type.</span></div>;
+}
+
+function App(){
+  const[step,setStep]=useState('upload');
+  const[brand,setBrand]=useState('');
+  const[cfg,setCfg]=useState({MIN_WASTED:20,MIN_OCC:6,LOW_ROAS:1.0,TOP_N:25});
+  const[rawRows,setRawRows]=useState([]);
+  const[results,setResults]=useState(null);
+  const[fileName,setFileName]=useState('');
+  const[section,setSection]=useState('auto');
+  const[tab,setTab]=useState('snapshot');
+  const[showCfg,setShowCfg]=useState(false);
+  const[dragging,setDragging]=useState(false);
+  const[processing,setProcessing]=useState(false);
+  const fileRef=useRef(null);
+  const prot=useMemo(()=>buildProt(brand),[brand]);
+
+  const runAll=useCallback((rows,p,c)=>({
+    auto:   runAutoAnalysis(rows,p,c),
+    phrase: runPartB(rows,p,c,'PHRASE'),
+    broad:  runPartB(rows,p,c,'BROAD'),
+  }),[]);
+
+  const handleFile=useCallback(file=>{
+    setProcessing(true);setFileName(file.name);
+    parseFile(file,(data,hdrs)=>{
+      const rows=normRows(data,hdrs);
+      setRawRows(rows);
+      setResults(runAll(rows,prot,cfg));
+      setProcessing(false);setSection('auto');setTab('snapshot');setStep('dashboard');
+    });
+  },[prot,cfg,runAll]);
+
+  const handleDrop=useCallback(e=>{e.preventDefault();setDragging(false);const f=e.dataTransfer.files[0];if(f)handleFile(f);},[handleFile]);
+  const handleSetCfg=newCfg=>{setCfg(newCfg);if(rawRows.length)setResults(runAll(rawRows,prot,newCfg));};
+  const handleSection=s=>{setSection(s);setTab(SECTIONS.find(x=>x.id===s).tabs[0].id);};
+
+  // ── Upload ──
+  if(step==='upload')return(
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:'2rem 1rem',background:'var(--bg)'}}>
+      <div style={{width:'100%',maxWidth:480}}>
+        <div style={{textAlign:'center',marginBottom:28}}>
+          <div style={{fontSize:24,fontWeight:500,marginBottom:8,letterSpacing:'-.01em'}}>Negative mining tool</div>
+          <div style={{fontSize:14,color:'var(--text2)',lineHeight:1.6}}>Upload a Search Term Report to surface wasted spend<br/>and actionable negation candidates.</div>
+        </div>
+        <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'24px 28px',boxShadow:'0 2px 12px rgba(0,0,0,.06)',marginBottom:12}}>
+          <label style={{fontSize:12,fontWeight:500,display:'block',marginBottom:6,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'.04em'}}>Brand name</label>
+          <input
+            value={brand}
+            onChange={e=>setBrand(e.target.value)}
+            placeholder="e.g. Sand Cloud"
+            style={{width:'100%',padding:'10px 12px',fontSize:13,border:'1px solid var(--border2)',borderRadius:'var(--radius)',background:'var(--bg)',color:'var(--text)',outline:'none'}}
+          />
+          <div style={{fontSize:11,color:'var(--text3)',marginTop:6}}>Used to protect brand keywords from being flagged as negatives.</div>
+        </div>
+        <div onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)} onDrop={handleDrop} onClick={()=>fileRef.current?.click()}
+          style={{border:`2px dashed ${dragging?'var(--text)':'var(--border2)'}`,borderRadius:'var(--radius-lg)',padding:'52px 24px',textAlign:'center',cursor:'pointer',background:dragging?'var(--surface2)':'var(--surface)',transition:'all .15s',boxShadow:'0 2px 12px rgba(0,0,0,.06)'}}>
+          {processing
+            ?<><div style={{fontSize:32,marginBottom:12}}>⏳</div><div style={{fontSize:14,color:'var(--text2)'}}>Analyzing your report…</div></>
+            :<><div style={{fontSize:40,marginBottom:14}}>📊</div><div style={{fontSize:15,fontWeight:500,marginBottom:8}}>Drop your Search Term Report here</div><div style={{fontSize:13,color:'var(--text2)'}}>Supports .xlsx and .csv · Click to browse</div></>}
+        </div>
+        <input ref={fileRef} type="file" accept=".xlsx,.csv" style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(f)handleFile(f);}}/>
+        <div style={{marginTop:14,fontSize:11,color:'var(--text3)',textAlign:'center',lineHeight:1.6}}>Required: Campaign Name · Targeting · Match Type · Customer Search Term<br/>Spend · 7 Day Total Sales · 7 Day Total Orders</div>
+      </div>
+    </div>
+  );
+
+  // ── Dashboard ──
+  if(!results)return null;
+  const{auto:autoR,phrase:phraseR,broad:broadR}=results;
+  const curSec=SECTIONS.find(s=>s.id===section);
+  const countFor=s=>s==='auto'?rawRows.filter(r=>AUTO_TYPES.has(r.targeting)).length:s==='phrase'?rawRows.filter(r=>r.matchType==='PHRASE').length:rawRows.filter(r=>r.matchType==='BROAD').length;
+  const candFor=s=>s==='auto'?autoR?.cands?.length||0:s==='phrase'?phraseR?.cands?.length||0:broadR?.cands?.length||0;
+
+  return(
+    <div style={{minHeight:'100vh',background:'var(--bg)'}}>
+
+      {/* top bar */}
+      <div style={{borderBottom:'1px solid var(--border)',padding:'12px 24px',display:'flex',alignItems:'center',gap:12,background:'var(--surface)',position:'sticky',top:0,zIndex:20,flexWrap:'wrap'}}>
+        <div style={{flex:1,minWidth:0}}>
+          <span style={{fontWeight:500,fontSize:15}}>{brand||'Negative mining tool'}</span>
+          <span style={{fontSize:12,color:'var(--text2)',marginLeft:10}}>{fileName}</span>
+          <span style={{fontSize:11,color:'var(--text3)',marginLeft:8,fontFamily:'var(--mono)'}}>
+            {rawRows.length.toLocaleString()} rows · {autoR?fmt$(autoR.snap.wastedSp)+' AUTO wasted':'no AUTO rows'}
+          </span>
+        </div>
+        <button onClick={()=>{setStep('upload');setResults(null);setRawRows([]);}} style={{fontSize:12,padding:'5px 12px',border:'1px solid var(--border2)',borderRadius:'var(--radius)',background:'var(--surface)',color:'var(--text2)',cursor:'pointer'}}>New file</button>
+        <button onClick={()=>setShowCfg(v=>!v)} style={{fontSize:12,padding:'5px 12px',border:'1px solid var(--border2)',borderRadius:'var(--radius)',background:showCfg?'var(--surface2)':'var(--surface)',color:'var(--text2)',cursor:'pointer'}}>⚙ Config</button>
+      </div>
+
+      {/* section nav: AUTO / Phrase / Broad */}
+      <div style={{borderBottom:'1px solid var(--border)',display:'flex',padding:'0 24px',background:'var(--surface)'}}>
+        {SECTIONS.map(sec=>(
+          <button key={sec.id} onClick={()=>handleSection(sec.id)}
+            style={{padding:'10px 16px',fontSize:13,fontWeight:section===sec.id?500:400,background:'transparent',border:'none',borderBottom:section===sec.id?'2px solid var(--text)':'2px solid transparent',cursor:'pointer',color:section===sec.id?'var(--text)':'var(--text2)',display:'flex',alignItems:'center',gap:7,marginBottom:-1,whiteSpace:'nowrap'}}>
+            {sec.label}
+            <span style={{fontSize:10,fontFamily:'var(--mono)',background:'var(--surface2)',padding:'1px 6px',borderRadius:10,color:'var(--text3)'}}>{countFor(sec.id).toLocaleString()}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* sub-tab nav within section */}
+      <div style={{borderBottom:'1px solid var(--border)',display:'flex',padding:'0 24px',background:'var(--surface)'}}>
+        {curSec.tabs.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)}
+            style={{padding:'8px 14px',fontSize:12,fontWeight:tab===t.id?500:400,background:'transparent',border:'none',borderBottom:tab===t.id?'2px solid var(--text2)':'2px solid transparent',cursor:'pointer',color:tab===t.id?'var(--text)':'var(--text2)',display:'flex',alignItems:'center',gap:6,marginBottom:-1,whiteSpace:'nowrap'}}>
+            {t.label}
+            {t.id==='cands'&&<span style={{fontSize:10,fontFamily:'var(--mono)',background:'var(--surface2)',padding:'1px 6px',borderRadius:10,color:'var(--text3)'}}>{candFor(section)}</span>}
+          </button>
+        ))}
+      </div>
+
+      {/* content */}
+      <div style={{padding:24,maxWidth:1400,margin:'0 auto'}}>
+        {section==='auto'&&!autoR&&<Empty msg="No AUTO rows found in this report."/>}
+        {section==='auto'&&autoR&&tab==='snapshot'&&<SnapshotTab snap={autoR.snap}/>}
+        {section==='auto'&&autoR&&tab==='wasted'  &&<WastedTab topWasted={autoR.topWasted} showType={true}  exportName="auto_wasted_terms.csv"/>}
+        {section==='auto'&&autoR&&tab==='cands'   &&<CandsTab  cands={autoR.cands}                          exportName="auto_neg_candidates.csv"/>}
+        {section==='auto'&&autoR&&tab==='tokens'  &&<TokenImpactTab tokens={autoR.tokens}/>}
+
+        {section==='phrase'&&!phraseR&&<Empty msg="No Phrase match rows found in this report."/>}
+        {section==='phrase'&&phraseR &&tab==='wasted'&&<WastedTab topWasted={phraseR.topWasted} showType={false} exportName="phrase_wasted_terms.csv"/>}
+        {section==='phrase'&&phraseR &&tab==='cands' &&<CandsTab  cands={phraseR.cands}                          exportName="phrase_neg_candidates.csv"/>}
+
+        {section==='broad'&&!broadR&&<Empty msg="No Broad match rows found in this report."/>}
+        {section==='broad'&&broadR  &&tab==='wasted'&&<WastedTab topWasted={broadR.topWasted} showType={false} exportName="broad_wasted_terms.csv"/>}
+        {section==='broad'&&broadR  &&tab==='cands' &&<CandsTab  cands={broadR.cands}                          exportName="broad_neg_candidates.csv"/>}
+      </div>
+
+      {showCfg&&<ConfigPanel cfg={cfg} setCfg={handleSetCfg} onClose={()=>setShowCfg(false)}/>}
+    </div>
+  );
+}
+
+const root=ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App/>);
+</script>
+</body>
+</html>
