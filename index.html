@@ -234,6 +234,7 @@ function runPartB(rows, prot, cfg, matchType) {
     N:sub.length, tSp,
     topWasted:[...wasted].sort((a,b)=>b.spend-a.spend).slice(0,TOP_N),
     cands:buildCands(sub,prot,cfg,tSp),
+    subRows:sub,
   };
 }
 
@@ -282,9 +283,10 @@ function SnapshotTab({snap}){
   );
 }
 
-function WastedTab({topWasted,showType,showCampFilter,exportName}){
+function WastedTab({topWasted,showType,showCampFilter,showAsinFilter=true,exportName}){
   const[typeFilter,setTypeFilter]=useState('all');
   const[campFilter,setCampFilter]=useState('all');
+  const[fullCamp,setFullCamp]=useState(false);
   const isAsin=term=>(/^b0[a-z0-9]{8}$/i).test(String(term||'').trim());
 
   const rows=useMemo(()=>topWasted.map((r,i)=>({...r,rank:i+1,termType:isAsin(r.searchTerm)?'ASIN':'Keyword'})),[topWasted]);
@@ -305,12 +307,14 @@ function WastedTab({topWasted,showType,showCampFilter,exportName}){
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,flexWrap:'wrap',gap:8}}>
         <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
           <span style={{fontSize:12,color:'var(--text3)'}}>{rows.length} terms · 0 orders</span>
-          <span style={{fontSize:11,color:'var(--text3)'}}>·</span>
-          {[['all','All',rows.length],['keyword','Keywords',kwCount],['asin','ASINs',asinCount]].map(([v,l,n])=>(
-            <button key={v} onClick={()=>setTypeFilter(v)} style={{fontSize:11,padding:'3px 10px',borderRadius:'var(--radius)',border:'1px solid var(--border2)',background:typeFilter===v?'var(--text)':'var(--surface)',color:typeFilter===v?'var(--bg)':'var(--text2)',cursor:'pointer',fontWeight:typeFilter===v?500:400}}>
-              {l} <span style={{opacity:.6}}>{n}</span>
-            </button>
-          ))}
+          {showAsinFilter&&<>
+            <span style={{fontSize:11,color:'var(--text3)'}}>·</span>
+            {[['all','All',rows.length],['keyword','Keywords',kwCount],['asin','ASINs',asinCount]].map(([v,l,n])=>(
+              <button key={v} onClick={()=>setTypeFilter(v)} style={{fontSize:11,padding:'3px 10px',borderRadius:'var(--radius)',border:'1px solid var(--border2)',background:typeFilter===v?'var(--text)':'var(--surface)',color:typeFilter===v?'var(--bg)':'var(--text2)',cursor:'pointer',fontWeight:typeFilter===v?500:400}}>
+                {l} <span style={{opacity:.6}}>{n}</span>
+              </button>
+            ))}
+          </>}
           {showCampFilter&&<>
             <span style={{fontSize:11,color:'var(--text3)'}}>·</span>
             <span style={{fontSize:12,color:'var(--text2)'}}>Campaign:</span>
@@ -319,6 +323,10 @@ function WastedTab({topWasted,showType,showCampFilter,exportName}){
               {camps.map(c=><option key={c} value={c}>{shortC(c)}</option>)}
             </select>
           </>}
+          <label style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'var(--text2)',marginLeft:4,cursor:'pointer',userSelect:'none'}}>
+            <input type="checkbox" checked={fullCamp} onChange={e=>setFullCamp(e.target.checked)} style={{accentColor:'var(--text)'}}/>
+            Full names
+          </label>
         </div>
         <Btn onClick={()=>exportCSV(sorted.map(r=>({rank:r.rank,campaign:r.campaign,auto_type:r.targeting,match_type:r.matchType,term_type:r.termType,search_term:r.searchTerm,spend:r.spend,clicks:r.clicks,orders:0})),exportName)}>↓ Export CSV</Btn>
       </div>
@@ -326,7 +334,7 @@ function WastedTab({topWasted,showType,showCampFilter,exportName}){
         <table>
           <thead><tr>
             <TH l="#"           c="rank"       sc={col} sd={dir} tg={toggle} w={36}/>
-            <TH l="Campaign"    c="campaign"   sc={col} sd={dir} tg={toggle} w={160}/>
+            <TH l="Campaign"    c="campaign"   sc={col} sd={dir} tg={toggle} w={fullCamp?360:160}/>
             {showType&&<TH l="Auto type"  c="targeting"  sc={col} sd={dir} tg={toggle} w={110}/>}
             <TH l="Type"        c="termType"   sc={col} sd={dir} tg={toggle} w={80}/>
             <TH l="Search term" c="searchTerm" sc={col} sd={dir} tg={toggle}/>
@@ -338,7 +346,7 @@ function WastedTab({topWasted,showType,showCampFilter,exportName}){
             {sorted.map((r,i)=>(
               <tr key={i} style={{background:i%2?'var(--surface2)':'var(--surface)'}}>
                 <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}} v={r.rank}/>
-                <TD sx={{fontSize:11,color:'var(--text2)',maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} v={<span title={r.campaign}>{shortC(r.campaign)}</span>}/>
+                <TD sx={{fontSize:11,color:'var(--text2)',maxWidth:fullCamp?360:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} v={<span title={r.campaign}>{fullCamp?r.campaign:shortC(r.campaign)}</span>}/>
                 {showType&&<TD v={<Badge v={r.targeting}/>}/>}
                 <TD v={<span style={{display:'inline-block',padding:'2px 7px',borderRadius:4,fontSize:10,fontWeight:600,background:r.termType==='ASIN'?'#f0fdf4':'#f1f0ee',color:r.termType==='ASIN'?'#166534':'#5c5c58'}}>{r.termType}</span>}/>
                 <TD sx={{fontSize:12,wordBreak:'break-word',fontFamily:r.termType==='ASIN'?'var(--mono)':'inherit'}} v={r.searchTerm}/>
@@ -354,13 +362,25 @@ function WastedTab({topWasted,showType,showCampFilter,exportName}){
   );
 }
 
-function CandsTab({cands,exportName}){
+function CandsTab({cands,rows,exportName}){
   const camps=useMemo(()=>[...new Set(cands.map(c=>c.camp))],[cands]);
   const[filter,setFilter]=useState('all');
   const[expanded,setExpanded]=useState(null);
+  const[expandMode,setExpandMode]=useState({}); // key=i, val='evidence'|'converting'
   const[fullCamp,setFullCamp]=useState(false);
   const filtered=useMemo(()=>filter==='all'?cands:cands.filter(c=>c.camp===filter),[cands,filter]);
   const{sorted,col,dir,toggle}=useSort(filtered,'rank','asc');
+
+  // look up converting search terms for a token+campaign
+  const getConvTerms=useCallback((tok,camp)=>{
+    if(!rows) return [];
+    return rows
+      .filter(r=>r.orders>0 && r.campaign===camp && r._s && r._s.has(tok))
+      .sort((a,b)=>b.sales-a.sales)
+      .slice(0,10)
+      .map(r=>({term:r.searchTerm,orders:r.orders,sales:r.sales,spend:r.spend}));
+  },[rows]);
+
   if(!cands.length)return(
     <div style={{padding:56,textAlign:'center',color:'var(--text3)',fontSize:13,lineHeight:2}}>
       No negation candidates meet the current thresholds.<br/>
@@ -396,30 +416,82 @@ function CandsTab({cands,exportName}){
             <TH l="Conv %"     c="ov"   sc={col} sd={dir} tg={toggle} w={62}/>
             <TH l="Net impact" c="ni"   sc={col} sd={dir} tg={toggle} w={88}/>
             <TH l="Match"      c="mr"   sc={col} sd={dir} tg={toggle} w={62}/>
-            <TH l="Evidence"   c={null} sc={col} sd={dir} tg={toggle}/>
+            <TH l="Evidence / Converting terms" c={null} sc={col} sd={dir} tg={toggle}/>
           </tr></thead>
           <tbody>
             {sorted.map((r,i)=>{
               const isExp=expanded===i;
+              const mode=expandMode[i]||'evidence';
+              const convTerms=isExp&&mode==='converting'?getConvTerms(r.tok,r.camp):[];
+              const rowBg=i%2?'var(--surface2)':'var(--surface)';
               return(
-                <tr key={i} onClick={()=>setExpanded(isExp?null:i)} style={{background:i%2?'var(--surface2)':'var(--surface)',cursor:'pointer'}} title="Click to expand evidence">
-                  <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}} v={r.rank}/>
-                  <TD sx={{fontSize:11,color:'var(--text2)',maxWidth:fullCamp?320:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} v={<span title={r.camp}>{fullCamp?r.camp:shortC(r.camp)}</span>}/>
-                  <TD sx={{fontWeight:500,fontSize:12}} v={r.tok}/>
-                  <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right'}} v={r.occ}/>
-                  <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right'}} v={r.o0}/>
-                  <TD sx={{fontFamily:'var(--mono)',color:'var(--red)',fontWeight:500}} v={fmt$(r.ws)}/>
-                  <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:r.ov===0?'var(--green)':'var(--amber)'}} v={pct(r.ov)}/>
-                  <TD sx={{fontFamily:'var(--mono)',color:'var(--red)',fontWeight:500}} v={fmtN(r.ni)}/>
-                  <TD v={<Badge v={r.mr}/>}/>
-                  <TD sx={{fontSize:11,color:'var(--text2)',lineHeight:1.7}} v={isExp ? r.ev.map((e,j)=><div key={j}>"{e.t.slice(0,52)}" <span style={{fontFamily:'var(--mono)',color:'var(--red)'}}>{fmt$(e.s)}</span></div>) : <span style={{color:'var(--text3)'}}>↓ expand</span>}/>
-                </tr>
+                <React.Fragment key={i}>
+                  <tr onClick={()=>setExpanded(isExp?null:i)} style={{background:rowBg,cursor:'pointer'}} title="Click to expand">
+                    <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}} v={r.rank}/>
+                    <TD sx={{fontSize:11,color:'var(--text2)',maxWidth:fullCamp?320:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} v={<span title={r.camp}>{fullCamp?r.camp:shortC(r.camp)}</span>}/>
+                    <TD sx={{fontWeight:500,fontSize:12}} v={r.tok}/>
+                    <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right'}} v={r.occ}/>
+                    <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right'}} v={r.o0}/>
+                    <TD sx={{fontFamily:'var(--mono)',color:'var(--red)',fontWeight:500}} v={fmt$(r.ws)}/>
+                    <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:r.ov===0?'var(--green)':'var(--amber)'}} v={pct(r.ov)}/>
+                    <TD sx={{fontFamily:'var(--mono)',color:'var(--red)',fontWeight:500}} v={fmtN(r.ni)}/>
+                    <TD v={<Badge v={r.mr}/>}/>
+                    <TD sx={{fontSize:11,color:'var(--text2)',lineHeight:1.7}} v={
+                      isExp
+                        ? <span style={{color:'var(--text3)',fontSize:10}}>↑ collapse</span>
+                        : <span style={{color:'var(--text3)',fontSize:10}}>↓ expand</span>
+                    }/>
+                  </tr>
+                  {isExp&&(
+                    <tr style={{background:i%2?'#eeede9':'#f5f4f1'}}>
+                      <td colSpan={10} style={{padding:'10px 16px',borderBottom:'1px solid var(--border)'}}>
+                        {/* toggle buttons */}
+                        <div style={{display:'flex',gap:6,marginBottom:10}}>
+                          <button onClick={e=>{e.stopPropagation();setExpandMode(m=>({...m,[i]:'evidence'}));}}
+                            style={{fontSize:11,padding:'3px 10px',borderRadius:'var(--radius)',border:'1px solid var(--border2)',background:mode==='evidence'?'var(--text)':'var(--surface)',color:mode==='evidence'?'var(--bg)':'var(--text2)',cursor:'pointer',fontWeight:mode==='evidence'?500:400}}>
+                            Wasted queries
+                          </button>
+                          {r.ov>0&&<button onClick={e=>{e.stopPropagation();setExpandMode(m=>({...m,[i]:'converting'}));}}
+                            style={{fontSize:11,padding:'3px 10px',borderRadius:'var(--radius)',border:'1px solid var(--border2)',background:mode==='converting'?'var(--text)':'var(--surface)',color:mode==='converting'?'var(--bg)':'var(--text2)',cursor:'pointer',fontWeight:mode==='converting'?500:400}}>
+                            Converting terms <span style={{opacity:.7,fontFamily:'var(--mono)'}}>{Math.round(r.ov*0.01*(rows?.filter(x=>x.orders>0&&x.campaign===r.camp).length||0))||''}</span>
+                          </button>}
+                        </div>
+                        {/* evidence panel */}
+                        {mode==='evidence'&&(
+                          <div>
+                            <div style={{fontSize:11,color:'var(--text3)',marginBottom:6,textTransform:'uppercase',letterSpacing:'.04em'}}>Top wasted queries containing "{r.tok}"</div>
+                            {r.ev.map((e,j)=>(
+                              <div key={j} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:j<r.ev.length-1?'0.5px solid var(--border)':'none',fontSize:12}}>
+                                <span style={{color:'var(--text2)'}}>{e.t}</span>
+                                <span style={{fontFamily:'var(--mono)',color:'var(--red)',fontWeight:500,marginLeft:16}}>{fmt$(e.s)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {/* converting terms panel */}
+                        {mode==='converting'&&(
+                          <div>
+                            <div style={{fontSize:11,color:'var(--text3)',marginBottom:6,textTransform:'uppercase',letterSpacing:'.04em'}}>Converting search terms containing "{r.tok}"</div>
+                            {convTerms.length===0&&<div style={{fontSize:12,color:'var(--text3)'}}>No converting terms found.</div>}
+                            {convTerms.map((t,j)=>(
+                              <div key={j} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'4px 0',borderBottom:j<convTerms.length-1?'0.5px solid var(--border)':'none',fontSize:12}}>
+                                <span style={{color:'var(--text2)',flex:1}}>{t.term}</span>
+                                <span style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)',marginLeft:12}}>{t.orders} ord</span>
+                                <span style={{fontFamily:'var(--mono)',color:'var(--green)',fontWeight:500,marginLeft:12}}>{fmt$(t.sales)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               );
             })}
           </tbody>
         </table>
       </div>
-      <div style={{fontSize:11,color:'var(--text3)',marginTop:6,textAlign:'right'}}>Click any row to expand evidence queries</div>
+      <div style={{fontSize:11,color:'var(--text3)',marginTop:6,textAlign:'right'}}>Click any row to expand · rows with Conv % &gt; 0 show converting terms</div>
     </div>
   );
 }
@@ -541,145 +613,143 @@ function ConfigPanel({cfg,setCfg,onClose}){
   );
 }
 
-// ── Gap Analysis engine ────────────────────────────────────────────────────
-function normTarget(t){ return String(t||'').toLowerCase().replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim(); }
-
-function normTargetingRows(data,hdrs){
-  const g=(row,terms)=>{const c=findCol(hdrs,terms);return c!=null?String(row[c]||'').trim():'';};
-  return data.map(row=>({
-    target:   g(row,['targeting','keyword','target','search term']),
-    matchType:g(row,['match type']).toUpperCase().trim(),
-    campaign: g(row,['campaign name','campaign']),
-    adGroup:  g(row,['ad group name','ad group']),
-  })).filter(r=>r.target&&!r.target.toLowerCase().startsWith('category='));
+// ── Gap Analysis engine (STR-only, no separate targeting report) ──────────
+const ASIN_BARE = /^b0[a-z0-9]{8}$/i;
+function normT(t){ const s=String(t||'').toLowerCase().replace(/[^a-z0-9\s]/g,' '); return s.replace(/\s+/g,' ').trim(); }
+function extractAsin(raw){
+  const m=raw.match(/asin="?([a-zA-Z0-9]{10})"?/i); if(m)return m[1].toLowerCase();
+  if(ASIN_BARE.test(raw.trim()))return raw.trim().toLowerCase();
+  return null;
+}
+// add both singular and plural forms to a set
+function addWithVariants(set, nt){
+  set.add(nt);
+  if(nt.endsWith('s')&&nt.length>3) set.add(nt.slice(0,-1)); // plural → singular
+  else if(!nt.endsWith('s')) set.add(nt+'s');                 // singular → plural
 }
 
-function runGapAnalysis(strRows, targetingRows){
-  // aggregate converting search terms from ALL match types
-  const convMap={};
-  strRows.filter(r=>r.orders>0).forEach(r=>{
-    const k=normTarget(r.searchTerm);
-    if(!k)return;
-    if(!convMap[k])convMap[k]={term:r.searchTerm,orders:0,sales:0,spend:0,clicks:0,campaigns:new Set()};
-    convMap[k].orders+=r.orders;
-    convMap[k].sales+=r.sales;
-    convMap[k].spend+=r.spend;
-    convMap[k].clicks+=r.clicks;
-    convMap[k].campaigns.add(r.campaign);
+function runGapAnalysis(strRows, brandTokens){
+  const AUTO_PSEUDO=new Set(['close-match','loose-match','substitutes','complements']);
+
+  // Build "already targeted" sets from STR Targeting column
+  const exactSet=new Set();
+  const phraseList=[];
+  const broadList=[];
+
+  strRows.forEach(r=>{
+    const raw=String(r.targeting||'').trim();
+    const mt=String(r.matchType||'').toUpperCase().trim();
+    if(!raw||AUTO_PSEUDO.has(raw.toLowerCase())) return;
+    if(raw.toLowerCase().startsWith('category=')||raw.toLowerCase().startsWith('keyword-group')) return;
+
+    const asin=extractAsin(raw);
+    if(asin){ exactSet.add(asin); return; }
+
+    // normalise broad modified (+word+word) → plain words
+    const nt=normT(raw.replace(/\+/g,' '));
+    if(!nt) return;
+    if(mt==='EXACT'){ addWithVariants(exactSet,nt); }
+    else if(mt==='PHRASE'){ phraseList.push(nt); phraseList.push(nt.endsWith('s')?nt.slice(0,-1):nt+'s'); }
+    else if(mt==='BROAD'){ broadList.push(nt); }
+    else { addWithVariants(exactSet,nt); } // '-' = treat as exact
   });
 
-  // build target lookup structures — across ALL campaigns
-  const exactTargets=new Set();
-  const phraseTargets=[];
-  const broadTargets=[];
-  targetingRows.forEach(r=>{
-    let raw=r.target.trim();
-    // normalise asin="B0XXXXXXXX" → bare ASIN
-    const asinMatch=raw.match(/asin="?([a-z0-9]{10})"?/i);
-    if(asinMatch) raw=asinMatch[1];
-    const nt=normTarget(raw);
-    if(!nt)return;
-    // bare ASINs and anything with matchType EXACT (or PAT expressions) go to exact set
-    if(ASIN_RE.test(raw)||r.matchType==='EXACT'||r.matchType==='-'||!r.matchType){
-      exactTargets.add(nt);
-    } else if(r.matchType==='PHRASE'){
-      phraseTargets.push(nt);
-    } else {
-      broadTargets.push(nt);
-    }
+  // Aggregate converting search terms
+  const convMap={};
+  strRows.filter(r=>r.orders>0).forEach(r=>{
+    const raw=String(r.searchTerm||'').trim();
+    const asin=extractAsin(raw);
+    const nk=asin||normT(raw);
+    if(!nk) return;
+    if(!convMap[nk]) convMap[nk]={term:raw,orders:0,sales:0,spend:0,campaigns:new Set(),isAsin:!!asin};
+    convMap[nk].orders+=r.orders;
+    convMap[nk].sales+=r.sales;
+    convMap[nk].spend+=r.spend;
+    convMap[nk].campaigns.add(r.campaign);
   });
 
   const results=[];
-  Object.entries(convMap).forEach(([normTerm,d])=>{
-    // skip if exact targeted anywhere across all campaigns
-    if(exactTargets.has(normTerm)) return;
-
-    // phrase coverage — term matches a phrase target anywhere
-    const phraseMatch=phraseTargets.find(pt=>normTerm===pt||normTerm.includes(pt)||pt.includes(normTerm));
-    // broad coverage — word overlap with any broad target
-    const termWords=new Set(normTerm.split(' '));
-    const broadMatch=!phraseMatch&&broadTargets.find(bt=>bt.split(' ').some(w=>w.length>2&&termWords.has(w)));
-
-    if(phraseMatch){
-      results.push({...d,normTerm,coverage:'Phrase only',priority:2,suggestedMatch:'EXACT',campaigns:[...d.campaigns]});
-    } else if(broadMatch){
-      results.push({...d,normTerm,coverage:'Broad only',priority:2,suggestedMatch:'PHRASE',campaigns:[...d.campaigns]});
-    } else {
-      results.push({...d,normTerm,coverage:'Not targeted',priority:1,suggestedMatch:'EXACT',campaigns:[...d.campaigns]});
+  Object.entries(convMap).forEach(([nk,d])=>{
+    // filter branded search terms — skip if term contains any brand token
+    if(brandTokens&&brandTokens.size>0){
+      const termWords=new Set(nk.split(' '));
+      if([...brandTokens].some(bt=>termWords.has(bt))) return;
     }
+
+    // strict exact/ASIN exclusion (including plural variants)
+    if(exactSet.has(nk)) return;
+
+    const isAsin=d.isAsin;
+    if(isAsin){
+      results.push({...d,nk,coverage:'Not targeted',priority:1,suggestedMatch:'PAT (ASIN)',campaigns:[...d.campaigns]});
+      return;
+    }
+
+    // phrase coverage: search term words must fully contain the phrase target as a contiguous sequence
+    const paddedNk=' '+nk+' ';
+    const phraseMatch=phraseList.find(pt=>{
+      const paddedPt=' '+pt+' ';
+      return paddedNk.includes(paddedPt)||nk===pt;
+    });
+    const nkSet=new Set(nk.split(' '));
+    const broadMatch=!phraseMatch&&broadList.find(bt=>bt.split(' ').every(w=>w.length<=2||nkSet.has(w)));
+
+    if(phraseMatch) results.push({...d,nk,coverage:'Phrase only',priority:2,suggestedMatch:'EXACT',campaigns:[...d.campaigns]});
+    else if(broadMatch) results.push({...d,nk,coverage:'Broad only',priority:2,suggestedMatch:'PHRASE',campaigns:[...d.campaigns]});
+    else results.push({...d,nk,coverage:'Not targeted',priority:1,suggestedMatch:'EXACT',campaigns:[...d.campaigns]});
   });
 
-  // sort: not targeted first, then by sales desc
   return results
-    .filter(r=>r.priority<3) // hide already-exact-targeted
     .sort((a,b)=>a.priority-b.priority||b.sales-a.sales)
     .map((r,i)=>({...r,rank:i+1,roas:r.spend>0?r.sales/r.spend:0}));
 }
 
 // ── Gap Analysis component ─────────────────────────────────────────────────
-function GapAnalysisSection({strRows}){
-  const[targRows,setTargRows]=useState(null);
-  const[targFileName,setTargFileName]=useState('');
-  const[dragging,setDragging]=useState(false);
-  const[processing,setProcessing]=useState(false);
+function GapAnalysisSection({strRows, brand}){
+  const brandTokens=useMemo(()=>{
+    if(!brand) return new Set();
+    const s=new Set();
+    normT(brand).split(' ').filter(w=>w.length>2).forEach(w=>s.add(w));
+    return s;
+  },[brand]);
+  const gaps=useMemo(()=>runGapAnalysis(strRows,brandTokens),[strRows,brandTokens]);
   const[coverFilter,setCoverFilter]=useState('all');
   const[campFilter,setCampFilter]=useState('all');
-  const targRef=useRef(null);
+  const[typeFilter,setTypeFilter]=useState('all');
+  const[fullCamp,setFullCamp]=useState(false);
 
-  const handleFile=useCallback(file=>{
-    setProcessing(true);setTargFileName(file.name);
-    parseFile(file,(data,hdrs)=>{
-      setTargRows(normTargetingRows(data,hdrs));
-      setProcessing(false);
-    });
-  },[]);
-  const handleDrop=useCallback(e=>{e.preventDefault();setDragging(false);const f=e.dataTransfer.files[0];if(f)handleFile(f);},[handleFile]);
-
-  const gaps=useMemo(()=>targRows?runGapAnalysis(strRows,targRows):null,[strRows,targRows]);
-
-  const allCamps=useMemo(()=>gaps?[...new Set(gaps.flatMap(r=>r.campaigns))].sort():[],[gaps]);
+  const allCamps=useMemo(()=>[...new Set(gaps.flatMap(r=>r.campaigns))].sort(),[gaps]);
+  const asinCount=useMemo(()=>gaps.filter(g=>g.isAsin).length,[gaps]);
+  const kwCount=useMemo(()=>gaps.filter(g=>!g.isAsin).length,[gaps]);
   const filtered=useMemo(()=>{
-    if(!gaps)return[];
     let r=gaps;
-    if(coverFilter!=='all')r=r.filter(g=>g.coverage===coverFilter);
-    if(campFilter!=='all')r=r.filter(g=>g.campaigns.includes(campFilter));
+    if(coverFilter!=='all') r=r.filter(g=>g.coverage===coverFilter);
+    if(campFilter!=='all') r=r.filter(g=>g.campaigns.includes(campFilter));
+    if(typeFilter==='asin') r=r.filter(g=>g.isAsin);
+    if(typeFilter==='keyword') r=r.filter(g=>!g.isAsin);
     return r;
-  },[gaps,coverFilter,campFilter]);
+  },[gaps,coverFilter,campFilter,typeFilter]);
   const{sorted,col,dir,toggle}=useSort(filtered,'rank','asc');
-
-  const COVER_COLORS={'Not targeted':['#fee2e2','#991b1b'],'Phrase only':['#fef9c3','#854d0e'],'Broad only':['#fef3c7','#92400e']};
-
-  if(!targRows) return(
-    <div style={{maxWidth:520,margin:'40px auto'}}>
-      <div style={{marginBottom:20}}>
-        <div style={{fontSize:15,fontWeight:500,marginBottom:6}}>Targeting gap analysis</div>
-        <div style={{fontSize:13,color:'var(--text2)',lineHeight:1.6}}>Upload your Targeting Report to compare what's converting in your STR against what you're already targeting. Gaps = high-value terms with no explicit keyword target.</div>
-      </div>
-      <div onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)} onDrop={handleDrop} onClick={()=>targRef.current?.click()}
-        style={{border:`2px dashed ${dragging?'var(--text)':'var(--border2)'}`,borderRadius:'var(--radius-lg)',padding:'52px 24px',textAlign:'center',cursor:'pointer',background:dragging?'var(--surface2)':'var(--surface)',transition:'all .15s',boxShadow:'0 2px 12px rgba(0,0,0,.06)'}}>
-        {processing
-          ?<><div style={{fontSize:28,marginBottom:10}}>⏳</div><div style={{fontSize:13,color:'var(--text2)'}}>Analyzing targeting report…</div></>
-          :<><div style={{fontSize:36,marginBottom:12}}>🎯</div><div style={{fontSize:14,fontWeight:500,marginBottom:6}}>Drop your Targeting Report here</div><div style={{fontSize:12,color:'var(--text2)'}}>Supports .xlsx and .csv · Click to browse</div></>}
-      </div>
-      <input ref={targRef} type="file" accept=".xlsx,.csv" style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(f)handleFile(f);}}/>
-      <div style={{marginTop:12,fontSize:11,color:'var(--text3)',textAlign:'center',lineHeight:1.6}}>Required: Campaign Name · Targeting · Match Type<br/>Optional: Spend · Sales · Orders</div>
-    </div>
-  );
 
   const notTargeted=gaps.filter(g=>g.coverage==='Not targeted').length;
   const phraseOnly=gaps.filter(g=>g.coverage==='Phrase only').length;
   const broadOnly=gaps.filter(g=>g.coverage==='Broad only').length;
   const gapSales=gaps.filter(g=>g.coverage==='Not targeted').reduce((s,r)=>s+r.sales,0);
+  const COVER_COLORS={'Not targeted':['#fee2e2','#991b1b'],'Phrase only':['#fef9c3','#854d0e'],'Broad only':['#fef3c7','#92400e']};
+
+  if(!gaps.length) return <div style={{padding:60,textAlign:'center',color:'var(--text3)',fontSize:13}}>No gap recommendations found — all converting search terms are already explicitly targeted.</div>;
 
   return(
     <div>
-      {/* summary cards */}
+      <div style={{marginBottom:18,padding:'12px 16px',background:'#f0f9ff',border:'1px solid #bae6fd',borderRadius:'var(--radius)',fontSize:12,color:'#0369a1',lineHeight:1.6}}>
+        Built from the STR you already uploaded — no second file needed. Targets are identified from the STR's Targeting column. Any term already covered by an exact keyword or PAT target is excluded.
+      </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:12,marginBottom:20}}>
         {[
           {l:'Not targeted',v:notTargeted+' terms',s:fmt$(gapSales)+' in conv. sales',a:'var(--red)'},
-          {l:'Phrase only',v:phraseOnly+' terms',s:'No exact match',a:'var(--amber)'},
-          {l:'Broad only',v:broadOnly+' terms',s:'No phrase/exact',a:'var(--amber)'},
-          {l:'Targeting report',v:targRows.length.toLocaleString()+' targets',s:targFileName.slice(0,28),a:null},
+          {l:'Phrase only',v:phraseOnly+' terms',s:'Suggest adding exact',a:'var(--amber)'},
+          {l:'Broad only',v:broadOnly+' terms',s:'Suggest adding phrase',a:'var(--amber)'},
+          {l:'Total gaps',v:gaps.length+' terms',s:'Across all match types',a:null},
         ].map(c=>(
           <div key={c.l} style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'var(--radius)',padding:'14px 16px'}}>
             <div style={{fontSize:11,color:'var(--text3)',marginBottom:4,textTransform:'uppercase',letterSpacing:'.04em'}}>{c.l}</div>
@@ -689,7 +759,6 @@ function GapAnalysisSection({strRows}){
         ))}
       </div>
 
-      {/* filters + export */}
       <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:12,flexWrap:'wrap'}}>
         <span style={{fontSize:12,color:'var(--text2)'}}>Coverage:</span>
         <select value={coverFilter} onChange={e=>setCoverFilter(e.target.value)} style={{fontSize:11,padding:'5px 10px',border:'1px solid var(--border2)',borderRadius:'var(--radius)',background:'var(--surface)',color:'var(--text)',outline:'none'}}>
@@ -703,28 +772,35 @@ function GapAnalysisSection({strRows}){
           <option value="all">All campaigns</option>
           {allCamps.map(c=><option key={c} value={c}>{shortC(c)}</option>)}
         </select>
+        <span style={{fontSize:11,color:'var(--text3)'}}>·</span>
+        {[['all','All',gaps.length],['keyword','Keywords',kwCount],['asin','ASINs',asinCount]].map(([v,l,n])=>(
+          <button key={v} onClick={()=>setTypeFilter(v)} style={{fontSize:11,padding:'3px 10px',borderRadius:'var(--radius)',border:'1px solid var(--border2)',background:typeFilter===v?'var(--text)':'var(--surface)',color:typeFilter===v?'var(--bg)':'var(--text2)',cursor:'pointer',fontWeight:typeFilter===v?500:400}}>
+            {l} <span style={{opacity:.6}}>{n}</span>
+          </button>
+        ))}
         <div style={{marginLeft:'auto',display:'flex',gap:8,alignItems:'center'}}>
+          <label style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'var(--text2)',cursor:'pointer',userSelect:'none'}}>
+            <input type="checkbox" checked={fullCamp} onChange={e=>setFullCamp(e.target.checked)} style={{accentColor:'var(--text)'}}/>
+            Full names
+          </label>
           <span style={{fontSize:11,color:'var(--text3)'}}>{filtered.length} shown</span>
-          <Btn onClick={()=>exportCSV(sorted.map(r=>({rank:r.rank,search_term:r.term,coverage:r.coverage,orders:r.orders,sales:Math.round(r.sales),spend:Math.round(r.spend),roas:r.roas.toFixed(2),suggested_match:r.suggestedMatch||'',converting_campaigns:r.campaigns.join(' | ')})),'gap_analysis.csv')}>↓ Export CSV</Btn>
-          <Btn onClick={()=>{setTargRows(null);setTargFileName('');}}>↩ New targeting file</Btn>
+          <Btn onClick={()=>exportCSV(sorted.map(r=>({rank:r.rank,search_term:r.term,coverage:r.coverage,suggested_match:r.suggestedMatch,orders:r.orders,sales:Math.round(r.sales),spend:Math.round(r.spend),roas:r.roas.toFixed(2),converting_campaigns:r.campaigns.join(' | ')})),'gap_analysis.csv')}>↓ Export CSV</Btn>
         </div>
       </div>
 
-      {/* table */}
       {sorted.length===0
-        ?<div style={{padding:48,textAlign:'center',color:'var(--text3)',fontSize:13}}>No gaps found for the current filters.</div>
+        ?<div style={{padding:48,textAlign:'center',color:'var(--text3)',fontSize:13}}>No gaps for the current filters.</div>
         :<div style={{overflowX:'auto',borderRadius:'var(--radius)',border:'1px solid var(--border)'}}>
           <table>
             <thead><tr>
-              <TH l="#"            c="rank"         sc={col} sd={dir} tg={toggle} w={32}/>
-              <TH l="Search term"  c="term"         sc={col} sd={dir} tg={toggle}/>
-              <TH l="Coverage"     c="coverage"     sc={col} sd={dir} tg={toggle} w={130}/>
-              <TH l="Orders"       c="orders"       sc={col} sd={dir} tg={toggle} w={68}/>
-              <TH l="Conv. sales"  c="sales"        sc={col} sd={dir} tg={toggle} w={90}/>
-              <TH l="Conv. spend"  c="spend"        sc={col} sd={dir} tg={toggle} w={90}/>
-              <TH l="ROAS"         c="roas"         sc={col} sd={dir} tg={toggle} w={72}/>
-              <TH l="Suggested"    c="suggestedMatch" sc={col} sd={dir} tg={toggle} w={80}/>
-              <TH l="Converting campaigns" c={null} sc={col} sd={dir} tg={toggle}/>
+              <TH l="#"                   c="rank"          sc={col} sd={dir} tg={toggle} w={32}/>
+              <TH l="Search term"         c="term"          sc={col} sd={dir} tg={toggle}/>
+              <TH l="Coverage"            c="coverage"      sc={col} sd={dir} tg={toggle} w={120}/>
+              <TH l="Orders"              c="orders"        sc={col} sd={dir} tg={toggle} w={68}/>
+              <TH l="Conv. sales"         c="sales"         sc={col} sd={dir} tg={toggle} w={90}/>
+              <TH l="ROAS"                c="roas"          sc={col} sd={dir} tg={toggle} w={72}/>
+              <TH l="Suggested"           c="suggestedMatch" sc={col} sd={dir} tg={toggle} w={100}/>
+              <TH l="Converting campaigns" c={null}         sc={col} sd={dir} tg={toggle}/>
             </tr></thead>
             <tbody>
               {sorted.map((r,i)=>{
@@ -732,14 +808,13 @@ function GapAnalysisSection({strRows}){
                 return(
                   <tr key={i} style={{background:i%2?'var(--surface2)':'var(--surface)'}}>
                     <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}} v={r.rank}/>
-                    <TD sx={{fontSize:12,fontWeight:500,wordBreak:'break-word'}} v={r.term}/>
+                    <TD sx={{fontSize:12,fontWeight:500,wordBreak:'break-word',fontFamily:r.isAsin?'var(--mono)':'inherit'}} v={r.term}/>
                     <TD v={<span style={{display:'inline-block',padding:'2px 8px',borderRadius:4,fontSize:11,fontWeight:600,background:bg,color:tx,whiteSpace:'nowrap'}}>{r.coverage}</span>}/>
                     <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right'}} v={r.orders}/>
                     <TD sx={{fontFamily:'var(--mono)',color:'var(--green)',fontWeight:500}} v={fmt$(r.sales)}/>
-                    <TD sx={{fontFamily:'var(--mono)'}} v={r.spend>0?fmt$(r.spend):'—'}/>
                     <TD sx={{fontFamily:'var(--mono)'}} v={r.roas>0?r.roas.toFixed(2)+'×':'—'}/>
-                    <TD v={r.suggestedMatch?<Badge v={r.suggestedMatch}/>:<span style={{color:'var(--text3)',fontSize:11}}>—</span>}/>
-                    <TD sx={{fontSize:11,color:'var(--text2)',lineHeight:1.6}} v={r.campaigns.map(c=><div key={c} style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:220}} title={c}>{shortC(c)}</div>)}/>
+                    <TD v={<Badge v={r.suggestedMatch}/>}/>
+                    <TD sx={{fontSize:11,color:'var(--text2)',lineHeight:1.7}} v={r.campaigns.map(c=><div key={c} style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:fullCamp?400:240}} title={c}>{fullCamp?c:shortC(c)}</div>)}/>
                   </tr>
                 );
               })}
@@ -747,7 +822,7 @@ function GapAnalysisSection({strRows}){
           </table>
         </div>}
       <div style={{fontSize:11,color:'var(--text3)',marginTop:8,lineHeight:1.6}}>
-        Showing converting search terms not covered by an exact match target. "Phrase only" = term matches a phrase target but no exact. "Broad only" = word overlap with a broad target only.
+        "Not targeted" = no keyword or ASIN target matches this term. "Phrase only" = covered by phrase match but no exact. "Broad only" = broad word overlap only.
       </div>
     </div>
   );
@@ -796,7 +871,14 @@ function App(){
   },[prot,cfg,runAll]);
 
   const handleDrop=useCallback(e=>{e.preventDefault();setDragging(false);const f=e.dataTransfer.files[0];if(f)handleFile(f);},[handleFile]);
-  const handleSetCfg=newCfg=>{setCfg(newCfg);if(rawRows.length)setResults(runAll(rawRows,prot,newCfg));};
+  const handleSetCfg=useCallback(newCfg=>{
+    setCfg(newCfg);
+    setResults(prev=>{
+      if(!rawRows.length)return prev;
+      const p=buildProt(brand);
+      return runAll(rawRows,p,newCfg);
+    });
+  },[rawRows,brand,runAll]);
   const handleSection=s=>{setSection(s);setTab(SECTIONS.find(x=>x.id===s).tabs[0].id);};
 
   // ── Upload ──
@@ -812,7 +894,7 @@ function App(){
           <input
             value={brand}
             onChange={e=>setBrand(e.target.value)}
-            placeholder="e.g. Sand Cloud"
+            placeholder=""
             style={{width:'100%',padding:'10px 12px',fontSize:13,border:'1px solid var(--border2)',borderRadius:'var(--radius)',background:'var(--bg)',color:'var(--text)',outline:'none'}}
           />
           <div style={{fontSize:11,color:'var(--text3)',marginTop:6}}>Used to protect brand keywords from being flagged as negatives.</div>
@@ -884,20 +966,19 @@ function App(){
       <div style={{padding:24,maxWidth:1400,margin:'0 auto'}}>
         {section==='auto'&&!autoR&&<Empty msg="No AUTO rows found in this report."/>}
         {section==='auto'&&autoR&&tab==='snapshot'&&<SnapshotTab snap={autoR.snap}/>}
-        {section==='auto'&&autoR&&tab==='wasted'  &&<WastedTab topWasted={autoR.topWasted} showType={true}  exportName="auto_wasted_terms.csv"/>}
-        {section==='auto'&&autoR&&tab==='cands'   &&<CandsTab  cands={autoR.cands}                          exportName="auto_neg_candidates.csv"/>}
+        {section==='auto'&&autoR&&tab==='wasted'  &&<WastedTab topWasted={autoR.topWasted} showType={true} showCampFilter={true} exportName="auto_wasted_terms.csv"/>}
+        {section==='auto'&&autoR&&tab==='cands'   &&<CandsTab cands={autoR.cands}   rows={autoR.autoRows} exportName="auto_neg_candidates.csv"/>}
         {section==='auto'&&autoR&&tab==='tokens'  &&<TokenImpactTab tokens={autoR.tokens}/>}
 
         {section==='phrase'&&!phraseR&&<Empty msg="No Phrase match rows found in this report."/>}
-        {section==='phrase'&&phraseR &&tab==='wasted'&&<WastedTab topWasted={phraseR.topWasted} showType={false} showCampFilter={true} exportName="phrase_wasted_terms.csv"/>}
-        {section==='phrase'&&phraseR &&tab==='cands' &&<CandsTab  cands={phraseR.cands} exportName="phrase_neg_candidates.csv"/>}
+        {section==='phrase'&&phraseR &&tab==='wasted'&&<WastedTab topWasted={phraseR.topWasted} showType={false} showCampFilter={true} showAsinFilter={false} exportName="phrase_wasted_terms.csv"/>}
+        {section==='phrase'&&phraseR &&tab==='cands' &&<CandsTab cands={phraseR.cands} rows={phraseR.subRows} exportName="phrase_neg_candidates.csv"/>}
 
         {section==='broad'&&!broadR&&<Empty msg="No Broad match rows found in this report."/>}
-        {section==='broad'&&broadR  &&tab==='wasted'&&<WastedTab topWasted={broadR.topWasted} showType={false} showCampFilter={true} exportName="broad_wasted_terms.csv"/>}
-        {section==='broad'&&broadR  &&tab==='cands' &&<CandsTab  cands={broadR.cands} exportName="broad_neg_candidates.csv"/>}
+        {section==='broad'&&broadR  &&tab==='wasted'&&<WastedTab topWasted={broadR.topWasted} showType={false} showCampFilter={true} showAsinFilter={false} exportName="broad_wasted_terms.csv"/>}
+        {section==='broad'&&broadR  &&tab==='cands' &&<CandsTab cands={broadR.cands} rows={broadR.subRows} exportName="broad_neg_candidates.csv"/>}
 
-        {section==='gaps'&&<GapAnalysisSection strRows={rawRows}/>}
-      </div>
+        {section==='gaps'&&<GapAnalysisSection strRows={rawRows} brand={brand}/>}      </div>
 
       {showCfg&&<ConfigPanel cfg={cfg} setCfg={handleSetCfg} onClose={()=>setShowCfg(false)}/>}
     </div>
