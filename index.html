@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>AUTO Negative Mining — Amazon PPC</title>
+<title>Negative Mining Tool — Amazon PPC</title>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -259,7 +259,7 @@ function SnapshotTab({snap}){
   return(
     <div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:12,marginBottom:24}}>
-        {[['Total AUTO spend',fmt$(tSp),null,null],['Total orders',orders.toLocaleString(),null,null],['Wasted spend',fmt$(wastedSp),pct(wastedPct)+' of AUTO spend','var(--red)'],['Low-ROAS spend (<1.0×)',fmt$(lrSp),lrN+' terms · '+pct(lrPct),'var(--amber)']].map(([l,v,s,a])=>(
+        {[['Total Auto spend',fmt$(tSp),null,null],['Total orders',orders.toLocaleString(),null,null],['Wasted spend',fmt$(wastedSp),pct(wastedPct)+' of Auto spend','var(--red)'],['Low-ROAS spend (<1.0×)',fmt$(lrSp),lrN+' terms · '+pct(lrPct),'var(--amber)']].map(([l,v,s,a])=>(
           <div key={l} style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'var(--radius)',padding:'14px 16px'}}>
             <div style={{fontSize:11,color:'var(--text3)',marginBottom:4,textTransform:'uppercase',letterSpacing:'.04em'}}>{l}</div>
             <div style={{fontSize:22,fontWeight:500,fontFamily:'var(--mono)',color:a||'var(--text)'}}>{v}</div>
@@ -268,7 +268,7 @@ function SnapshotTab({snap}){
         ))}
       </div>
       <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'18px 20px'}}>
-        <div style={{fontSize:11,fontWeight:500,color:'var(--text2)',marginBottom:16,textTransform:'uppercase',letterSpacing:'.05em'}}>Waste by AUTO type</div>
+        <div style={{fontSize:11,fontWeight:500,color:'var(--text2)',marginBottom:16,textTransform:'uppercase',letterSpacing:'.05em'}}>Waste by Auto type</div>
         {wasteByType.map((r,i)=>(
           <div key={r.tp} style={{marginBottom:i<wasteByType.length-1?14:0}}>
             <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}>
@@ -829,7 +829,7 @@ function GapAnalysisSection({strRows, brand}){
 }
 
 const SECTIONS=[
-  {id:'auto',   label:'AUTO',   tabs:[{id:'snapshot',label:'Snapshot'},{id:'wasted',label:'Wasted terms'},{id:'cands',label:'Negation candidates'},{id:'tokens',label:'Token impact'}]},
+  {id:'auto',   label:'Auto',   tabs:[{id:'snapshot',label:'Snapshot'},{id:'wasted',label:'Wasted terms'},{id:'cands',label:'Negation candidates'},{id:'tokens',label:'Token impact'}]},
   {id:'phrase', label:'Phrase', tabs:[{id:'wasted',label:'Wasted terms'},{id:'cands',label:'Negation candidates'}]},
   {id:'broad',  label:'Broad',  tabs:[{id:'wasted',label:'Wasted terms'},{id:'cands',label:'Negation candidates'}]},
   {id:'gaps',   label:'Gap analysis', tabs:[]},
@@ -933,7 +933,7 @@ function App(){
           <span style={{fontWeight:500,fontSize:15}}>{brand||'Negative mining tool'}</span>
           <span style={{fontSize:12,color:'var(--text2)',marginLeft:10}}>{fileName}</span>
           <span style={{fontSize:11,color:'var(--text3)',marginLeft:8,fontFamily:'var(--mono)'}}>
-            {rawRows.length.toLocaleString()} rows · {autoR?fmt$(autoR.snap.wastedSp)+' AUTO wasted':'no AUTO rows'}
+            {rawRows.length.toLocaleString()} rows · {autoR?fmt$(autoR.snap.wastedSp)+' Auto wasted':'no Auto rows'}
           </span>
         </div>
         <button onClick={()=>{setStep('upload');setResults(null);setRawRows([]);}} style={{fontSize:12,padding:'5px 12px',border:'1px solid var(--border2)',borderRadius:'var(--radius)',background:'var(--surface)',color:'var(--text2)',cursor:'pointer'}}>New file</button>
@@ -964,7 +964,7 @@ function App(){
 
       {/* content */}
       <div style={{padding:24,maxWidth:1400,margin:'0 auto'}}>
-        {section==='auto'&&!autoR&&<Empty msg="No AUTO rows found in this report."/>}
+        {section==='auto'&&!autoR&&<Empty msg="No Auto rows found in this report."/>}
         {section==='auto'&&autoR&&tab==='snapshot'&&<SnapshotTab snap={autoR.snap}/>}
         {section==='auto'&&autoR&&tab==='wasted'  &&<WastedTab topWasted={autoR.topWasted} showType={true} showCampFilter={true} exportName="auto_wasted_terms.csv"/>}
         {section==='auto'&&autoR&&tab==='cands'   &&<CandsTab cands={autoR.cands}   rows={autoR.autoRows} exportName="auto_neg_candidates.csv"/>}
