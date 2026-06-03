@@ -93,12 +93,30 @@ function normRows(data, hdrs) {
     clicks: parseFloat(g(row,['clicks']))||0,
   })).filter(r => r.searchTerm && r.campaign);
 }
-function exportCSV(data, fn) {
-  if (!data.length) return;
-  const cols = Object.keys(data[0]);
-  const rows = [cols.join(','), ...data.map(r => cols.map(c => { const v = String(r[c]??''); return (v.includes(',')||v.includes('"')) ? `"${v.replace(/"/g,'""')}"` : v; }).join(','))];
-  const b = new Blob([rows.join('\n')], {type:'text/csv'});
-  const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href=u; a.download=fn; a.click(); URL.revokeObjectURL(u);
+function copyToClipboard(items, onDone) {
+  const text = items.join('\n');
+  navigator.clipboard.writeText(text).then(onDone).catch(()=>{
+    const el = document.createElement('textarea');
+    el.value = text; document.body.appendChild(el); el.select();
+    document.execCommand('copy'); document.body.removeChild(el);
+    onDone && onDone();
+  });
+}
+
+function CopyBtn({ getItems, label = 'Copy keywords' }) {
+  const [copied, setCopied] = React.useState(false);
+  const handleClick = () => {
+    const items = getItems();
+    copyToClipboard(items, () => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+  return (
+    <button onClick={handleClick} style={{fontSize:11,padding:'5px 12px',border:'1px solid var(--border2)',borderRadius:'var(--radius)',background:copied?'var(--text)':'var(--surface)',color:copied?'var(--bg)':'var(--text2)',cursor:'pointer',transition:'all .15s',minWidth:110}}>
+      {copied ? '✓ Copied!' : label}
+    </button>
+  );
 }
 
 // shared negation candidate engine
@@ -286,7 +304,6 @@ function SnapshotTab({snap}){
 function WastedTab({topWasted,showType,showCampFilter,showAsinFilter=true,exportName}){
   const[typeFilter,setTypeFilter]=useState('all');
   const[campFilter,setCampFilter]=useState('all');
-  const[fullCamp,setFullCamp]=useState(false);
   const isAsin=term=>(/^b0[a-z0-9]{8}$/i).test(String(term||'').trim());
 
   const rows=useMemo(()=>topWasted.map((r,i)=>({...r,rank:i+1,termType:isAsin(r.searchTerm)?'ASIN':'Keyword'})),[topWasted]);
@@ -320,21 +337,17 @@ function WastedTab({topWasted,showType,showCampFilter,showAsinFilter=true,export
             <span style={{fontSize:12,color:'var(--text2)'}}>Campaign:</span>
             <select value={campFilter} onChange={e=>setCampFilter(e.target.value)} style={{fontSize:11,padding:'4px 8px',border:'1px solid var(--border2)',borderRadius:'var(--radius)',background:'var(--surface)',color:'var(--text)',outline:'none'}}>
               <option value="all">All ({rows.length})</option>
-              {camps.map(c=><option key={c} value={c}>{shortC(c)}</option>)}
+              {camps.map(c=><option key={c} value={c}>{c}</option>)}
             </select>
           </>}
-          <label style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'var(--text2)',marginLeft:4,cursor:'pointer',userSelect:'none'}}>
-            <input type="checkbox" checked={fullCamp} onChange={e=>setFullCamp(e.target.checked)} style={{accentColor:'var(--text)'}}/>
-            Full names
-          </label>
         </div>
-        <Btn onClick={()=>exportCSV(sorted.map(r=>({rank:r.rank,campaign:r.campaign,auto_type:r.targeting,match_type:r.matchType,term_type:r.termType,search_term:r.searchTerm,spend:r.spend,clicks:r.clicks,orders:0})),exportName)}>↓ Export CSV</Btn>
+        <CopyBtn getItems={()=>sorted.map(r=>r.searchTerm)} label="Copy search terms"/>
       </div>
       <div style={{overflowX:'auto',borderRadius:'var(--radius)',border:'1px solid var(--border)'}}>
         <table>
           <thead><tr>
             <TH l="#"           c="rank"       sc={col} sd={dir} tg={toggle} w={36}/>
-            <TH l="Campaign"    c="campaign"   sc={col} sd={dir} tg={toggle} w={fullCamp?360:160}/>
+            <TH l="Campaign"    c="campaign"   sc={col} sd={dir} tg={toggle}/>
             {showType&&<TH l="Auto type"  c="targeting"  sc={col} sd={dir} tg={toggle} w={110}/>}
             <TH l="Type"        c="termType"   sc={col} sd={dir} tg={toggle} w={80}/>
             <TH l="Search term" c="searchTerm" sc={col} sd={dir} tg={toggle}/>
@@ -346,7 +359,7 @@ function WastedTab({topWasted,showType,showCampFilter,showAsinFilter=true,export
             {sorted.map((r,i)=>(
               <tr key={i} style={{background:i%2?'var(--surface2)':'var(--surface)'}}>
                 <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}} v={r.rank}/>
-                <TD sx={{fontSize:11,color:'var(--text2)',maxWidth:fullCamp?360:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} v={<span title={r.campaign}>{fullCamp?r.campaign:shortC(r.campaign)}</span>}/>
+                <TD sx={{fontSize:11,color:'var(--text2)',wordBreak:'break-word'}} v={r.campaign}/>
                 {showType&&<TD v={<Badge v={r.targeting}/>}/>}
                 <TD v={<span style={{display:'inline-block',padding:'2px 7px',borderRadius:4,fontSize:10,fontWeight:600,background:r.termType==='ASIN'?'#f0fdf4':'#f1f0ee',color:r.termType==='ASIN'?'#166534':'#5c5c58'}}>{r.termType}</span>}/>
                 <TD sx={{fontSize:12,wordBreak:'break-word',fontFamily:r.termType==='ASIN'?'var(--mono)':'inherit'}} v={r.searchTerm}/>
@@ -366,8 +379,7 @@ function CandsTab({cands,rows,exportName}){
   const camps=useMemo(()=>[...new Set(cands.map(c=>c.camp))],[cands]);
   const[filter,setFilter]=useState('all');
   const[expanded,setExpanded]=useState(null);
-  const[expandMode,setExpandMode]=useState({}); // key=i, val='evidence'|'converting'
-  const[fullCamp,setFullCamp]=useState(false);
+  const[expandMode,setExpandMode]=useState({});
   const filtered=useMemo(()=>filter==='all'?cands:cands.filter(c=>c.camp===filter),[cands,filter]);
   const{sorted,col,dir,toggle}=useSort(filtered,'rank','asc');
 
@@ -396,19 +408,15 @@ function CandsTab({cands,rows,exportName}){
           {camps.map(c=><option key={c} value={c}>{shortC(c)}</option>)}
         </select>
         <div style={{marginLeft:'auto',display:'flex',gap:8,alignItems:'center'}}>
-          <label style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'var(--text2)',cursor:'pointer'}}>
-            <input type="checkbox" checked={fullCamp} onChange={e=>setFullCamp(e.target.checked)} style={{accentColor:'var(--text)'}}/>
-            Full names
-          </label>
           <span style={{fontSize:11,color:'var(--text3)'}}>{filtered.length} shown</span>
-          <Btn onClick={()=>exportCSV(sorted.map(r=>({rank:r.rank,campaign:r.camp,token:r.tok,occurrences:r.occ,occ_0_order:r.o0,wasted_spend:Math.round(r.ws),conv_overlap_pct:r.ov.toFixed(2),net_impact:Math.round(r.ni),match_type:r.mr,evidence:r.ev.map(e=>e.t).join(' | ')})),exportName)}>↓ Export CSV</Btn>
+          <CopyBtn getItems={()=>sorted.map(r=>r.tok)} label="Copy tokens"/>
         </div>
       </div>
       <div style={{overflowX:'auto',borderRadius:'var(--radius)',border:'1px solid var(--border)'}}>
         <table>
           <thead><tr>
             <TH l="#"          c="rank" sc={col} sd={dir} tg={toggle} w={32}/>
-            <TH l="Campaign"   c="camp" sc={col} sd={dir} tg={toggle} w={fullCamp?320:140}/>
+            <TH l="Campaign"   c="camp" sc={col} sd={dir} tg={toggle}/>
             <TH l="Token"      c="tok"  sc={col} sd={dir} tg={toggle} w={105}/>
             <TH l="Occ"        c="occ"  sc={col} sd={dir} tg={toggle} w={44}/>
             <TH l="0-ord"      c="o0"   sc={col} sd={dir} tg={toggle} w={48}/>
@@ -428,7 +436,7 @@ function CandsTab({cands,rows,exportName}){
                 <React.Fragment key={i}>
                   <tr onClick={()=>setExpanded(isExp?null:i)} style={{background:rowBg,cursor:'pointer'}} title="Click to expand">
                     <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}} v={r.rank}/>
-                    <TD sx={{fontSize:11,color:'var(--text2)',maxWidth:fullCamp?320:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} v={<span title={r.camp}>{fullCamp?r.camp:shortC(r.camp)}</span>}/>
+                    <TD sx={{fontSize:11,color:'var(--text2)',wordBreak:'break-word'}} v={r.camp}/>
                     <TD sx={{fontWeight:500,fontSize:12}} v={r.tok}/>
                     <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right'}} v={r.occ}/>
                     <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right'}} v={r.o0}/>
@@ -521,7 +529,7 @@ function TokenImpactTab({tokens}){
           </button>
         ))}
         <div style={{marginLeft:'auto'}}>
-          <Btn onClick={()=>exportCSV(sorted.map(r=>({rank:r.rank,token:r.tok,occurrences:r.occ,wasted_spend:Math.round(r.wSp),conv_sales:Math.round(r.cSal),conv_spend:Math.round(r.cSp),conv_orders:r.cOrd,surplus:Math.round(r.surplus),net_impact:Math.round(r.netImpact),token_roas:r.tRoas>0?r.tRoas.toFixed(2):'0',conv_overlap_pct:r.cOverlap.toFixed(2)})),`token_impact_${view}.csv`)}>↓ Export CSV</Btn>
+          <CopyBtn getItems={()=>sorted.map(r=>r.tok)} label="Copy tokens"/>
         </div>
       </div>
 
@@ -716,7 +724,6 @@ function GapAnalysisSection({strRows, brand}){
   const[coverFilter,setCoverFilter]=useState('all');
   const[campFilter,setCampFilter]=useState('all');
   const[typeFilter,setTypeFilter]=useState('all');
-  const[fullCamp,setFullCamp]=useState(false);
 
   const allCamps=useMemo(()=>[...new Set(gaps.flatMap(r=>r.campaigns))].sort(),[gaps]);
   const asinCount=useMemo(()=>gaps.filter(g=>g.isAsin).length,[gaps]);
@@ -779,12 +786,8 @@ function GapAnalysisSection({strRows, brand}){
           </button>
         ))}
         <div style={{marginLeft:'auto',display:'flex',gap:8,alignItems:'center'}}>
-          <label style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'var(--text2)',cursor:'pointer',userSelect:'none'}}>
-            <input type="checkbox" checked={fullCamp} onChange={e=>setFullCamp(e.target.checked)} style={{accentColor:'var(--text)'}}/>
-            Full names
-          </label>
           <span style={{fontSize:11,color:'var(--text3)'}}>{filtered.length} shown</span>
-          <Btn onClick={()=>exportCSV(sorted.map(r=>({rank:r.rank,search_term:r.term,coverage:r.coverage,suggested_match:r.suggestedMatch,orders:r.orders,sales:Math.round(r.sales),spend:Math.round(r.spend),roas:r.roas.toFixed(2),converting_campaigns:r.campaigns.join(' | ')})),'gap_analysis.csv')}>↓ Export CSV</Btn>
+          <CopyBtn getItems={()=>sorted.map(r=>r.term)} label="Copy targets"/>
         </div>
       </div>
 
@@ -814,7 +817,7 @@ function GapAnalysisSection({strRows, brand}){
                     <TD sx={{fontFamily:'var(--mono)',color:'var(--green)',fontWeight:500}} v={fmt$(r.sales)}/>
                     <TD sx={{fontFamily:'var(--mono)'}} v={r.roas>0?r.roas.toFixed(2)+'×':'—'}/>
                     <TD v={<Badge v={r.suggestedMatch}/>}/>
-                    <TD sx={{fontSize:11,color:'var(--text2)',lineHeight:1.7}} v={r.campaigns.map(c=><div key={c} style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:fullCamp?400:240}} title={c}>{fullCamp?c:shortC(c)}</div>)}/>
+                    <TD sx={{fontSize:11,color:'var(--text2)',lineHeight:1.7}} v={r.campaigns.map(c=><div key={c} style={{wordBreak:'break-word'}}>{c}</div>)}/>
                   </tr>
                 );
               })}
