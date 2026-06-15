@@ -9,29 +9,57 @@
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://rickygrossman5-wq.github.io/cac-analyzer/styles.css">
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --bg: #f9f9f8; --surface: #ffffff; --surface2: #f2f1ef;
-    --border: rgba(0,0,0,0.10); --border2: rgba(0,0,0,0.16);
-    --text: #1a1a18; --text2: #5c5c58; --text3: #9a9a94;
-    --red: #d94040; --amber: #b06a12; --green: #1a8055;
-    --radius: 8px; --radius-lg: 12px;
-    --mono: 'DM Mono', monospace; --sans: 'DM Sans', sans-serif;
+    --black:    #0C0C0A;
+    --ink:      #161614;
+    --card:     #1E1E1C;
+    --card-2:   #252523;
+    --line:     rgba(255,255,255,.13);
+    --line-soft: rgba(255,255,255,.06);
+    --white:    #F0F0EB;
+    --gray:     #9A9A92;
+    --gray-dim: #5E5E58;
+    --green:    #3ECF74;
+    --red:      #F05252;
+    --amber:    #E8C840;
+    --sans:     'Archivo', system-ui, sans-serif;
+    --mono:     'DM Mono', Menlo, monospace;
+
+    /* aliases mapping legacy variable names onto PLTFRM tokens */
+    --bg: var(--black);
+    --surface: var(--card);
+    --surface2: var(--card-2);
+    --border: var(--line-soft);
+    --border2: var(--line);
+    --text: var(--white);
+    --text2: var(--gray);
+    --text3: var(--gray-dim);
+    --radius: 8px;
+    --radius-lg: 10px;
   }
-  body { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; min-height: 100vh; }
-  #root { min-height: 100vh; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--sans); background: var(--black); color: var(--white); font-size: 14px; line-height: 1.5; min-height: 100vh; -webkit-font-smoothing: antialiased; }
+  #root { min-height: 100vh; position: relative; z-index: 1; }
   input, select, button { font-family: var(--sans); }
   button { cursor: pointer; }
   ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: var(--bg); }
-  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+  ::-webkit-scrollbar-track { background: var(--black); }
+  ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
   table { border-collapse: collapse; width: 100%; }
+  .grain {
+    position: fixed; inset: 0; pointer-events: none; z-index: 999;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    background-repeat: repeat; background-size: 128px; opacity: .5;
+  }
 </style>
 </head>
 <body>
+<div class="grain"></div>
 <div id="root"></div>
 <script type="text/babel">
 const { useState, useMemo, useRef, useCallback } = React;
@@ -113,11 +141,22 @@ function CopyBtn({ getItems, label = 'Copy keywords' }) {
     });
   };
   return (
-    <button onClick={handleClick} style={{fontSize:11,padding:'5px 12px',border:'1px solid var(--border2)',borderRadius:'var(--radius)',background:copied?'var(--text)':'var(--surface)',color:copied?'var(--bg)':'var(--text2)',cursor:'pointer',transition:'all .15s',minWidth:110}}>
-      {copied ? '✓ Copied!' : label}
+    <button onClick={handleClick} className={copied ? 'btn-primary' : 'btn-secondary'} style={{minWidth:130}}>
+      {copied ? 'Copied' : label}
     </button>
   );
 }
+
+const IconUpload = () => (
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+  </svg>
+);
+const IconLoader = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 12a9 9 0 1 1-9-9"/>
+  </svg>
+);
 
 // shared negation candidate engine
 function buildCands(subset, prot, cfg, totalSpend) {
@@ -266,34 +305,43 @@ function useSort(data,dc,dd='desc'){
   return{sorted,col,dir,toggle};
 }
 
-const BM={'close-match':['#dbeafe','#1e40af'],'loose-match':['#ffedd5','#9a3412'],substitutes:['#fae8ff','#6b21a8'],complements:['#dcfce7','#166534'],PHRASE:['#dbeafe','#1d4ed8'],EXACT:['#fef9c3','#854d0e'],BROAD:['#ffedd5','#9a3412']};
-const Badge=({v})=>{const[bg,tx]=BM[v]||['#f1f0ee','#5c5c58'];return <span style={{display:'inline-block',padding:'2px 8px',borderRadius:4,fontSize:11,fontWeight:600,background:bg,color:tx,whiteSpace:'nowrap'}}>{v}</span>;};
-const TH=({l,c,sc,sd,tg,w})=><th onClick={()=>c&&tg(c)} style={{padding:'8px 10px',fontWeight:500,fontSize:11,color:'var(--text2)',whiteSpace:'nowrap',cursor:c?'pointer':'default',userSelect:'none',borderBottom:'1px solid var(--border)',background:'var(--surface2)',textAlign:'left',width:w}}>{l}{c===sc&&<span style={{marginLeft:3,opacity:.5}}>{sd==='asc'?'↑':'↓'}</span>}</th>;
-const TD=({v,sx={}})=><td style={{padding:'7px 10px',fontSize:12,borderBottom:'1px solid var(--border)',verticalAlign:'top',...sx}}>{v}</td>;
-const Btn=({onClick,children})=><button onClick={onClick} style={{fontSize:11,padding:'5px 12px',border:'1px solid var(--border2)',borderRadius:'var(--radius)',background:'var(--surface)',color:'var(--text2)',cursor:'pointer'}}>{children}</button>;
+const BM={
+  'close-match': ['rgba(62,207,116,.12)','var(--green)'],
+  'loose-match': ['rgba(232,200,64,.12)','var(--amber)'],
+  substitutes:   ['rgba(255,255,255,.06)','var(--gray)'],
+  complements:   ['rgba(255,255,255,.10)','var(--white)'],
+  PHRASE:        ['rgba(255,255,255,.06)','var(--gray)'],
+  EXACT:         ['rgba(62,207,116,.12)','var(--green)'],
+  BROAD:         ['rgba(232,200,64,.12)','var(--amber)'],
+  'PAT (ASIN)':  ['rgba(255,255,255,.08)','var(--white)'],
+};
+const Badge=({v})=>{const[bg,tx]=BM[v]||['rgba(255,255,255,.06)','var(--gray)'];return <span style={{display:'inline-block',padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:500,fontFamily:'var(--mono)',background:bg,color:tx,border:'1px solid var(--line)',whiteSpace:'nowrap'}}>{v}</span>;};
+const TH=({l,c,sc,sd,tg,w})=><th className={c?'sortable':''} style={w?{width:w}:undefined} onClick={()=>c&&tg(c)}>{l}{c===sc&&<span className="sort-icon active">{sd==='asc'?'↑':'↓'}</span>}</th>;
+const TD=({v,sx={},num})=><td className={num?'num':''} style={sx}>{v}</td>;
+const Btn=({onClick,children})=><button onClick={onClick} className="btn-secondary">{children}</button>;
 
 function SnapshotTab({snap}){
   const{tSp,orders,wastedSp,wastedPct,lrSp,lrN,lrPct,wasteByType}=snap;
   return(
     <div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:12,marginBottom:24}}>
-        {[['Total Auto spend',fmt$(tSp),null,null],['Total orders',orders.toLocaleString(),null,null],['Wasted spend',fmt$(wastedSp),pct(wastedPct)+' of Auto spend','var(--red)'],['Low-ROAS spend (<1.0×)',fmt$(lrSp),lrN+' terms · '+pct(lrPct),'var(--amber)']].map(([l,v,s,a])=>(
-          <div key={l} style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'var(--radius)',padding:'14px 16px'}}>
-            <div style={{fontSize:11,color:'var(--text3)',marginBottom:4,textTransform:'uppercase',letterSpacing:'.04em'}}>{l}</div>
-            <div style={{fontSize:22,fontWeight:500,fontFamily:'var(--mono)',color:a||'var(--text)'}}>{v}</div>
-            {s&&<div style={{fontSize:11,color:'var(--text3)',marginTop:3}}>{s}</div>}
+        {[['Total Auto Spend',fmt$(tSp),null,null],['Total Orders',orders.toLocaleString(),null,null],['Wasted Spend',fmt$(wastedSp),pct(wastedPct)+' of Auto spend','var(--red)'],['Low-ROAS Spend (<1.0x)',fmt$(lrSp),lrN+' terms · '+pct(lrPct),'var(--amber)']].map(([l,v,s,a])=>(
+          <div key={l} className="card">
+            <div className="mc-lbl">{l}</div>
+            <div className="mc-val" style={{color:a||'var(--white)'}}>{v}</div>
+            {s&&<div className="mc-prior neu">{s}</div>}
           </div>
         ))}
       </div>
-      <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'18px 20px'}}>
-        <div style={{fontSize:11,fontWeight:500,color:'var(--text2)',marginBottom:16,textTransform:'uppercase',letterSpacing:'.05em'}}>Waste by Auto type</div>
+      <div className="card">
+        <div className="slbl">Waste by Auto Type</div>
         {wasteByType.map((r,i)=>(
           <div key={r.tp} style={{marginBottom:i<wasteByType.length-1?14:0}}>
             <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}>
-              <span style={{display:'flex',alignItems:'center',gap:8}}><Badge v={r.tp}/><span style={{fontFamily:'var(--mono)',fontWeight:500,fontSize:13}}>{fmt$(r.ws)}</span></span>
-              <span style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}}>{pct(r.wpct)} of waste · {pct(r.spct)} of spend</span>
+              <span style={{display:'flex',alignItems:'center',gap:8}}><Badge v={r.tp}/><span style={{fontFamily:'var(--mono)',fontWeight:500,fontSize:13,color:'var(--white)'}}>{fmt$(r.ws)}</span></span>
+              <span style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--gray-dim)'}}>{pct(r.wpct)} of waste · {pct(r.spct)} of spend</span>
             </div>
-            <div style={{height:6,background:'var(--surface2)',borderRadius:3}}><div style={{height:6,width:Math.min(r.wpct,100)+'%',background:'var(--red)',borderRadius:3}}/></div>
+            <div style={{height:6,background:'var(--card-2)',borderRadius:3}}><div style={{height:6,width:Math.min(r.wpct,100)+'%',background:'var(--red)',borderRadius:3}}/></div>
           </div>
         ))}
       </div>
@@ -323,19 +371,19 @@ function WastedTab({topWasted,showType,showCampFilter,showAsinFilter=true,export
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,flexWrap:'wrap',gap:8}}>
         <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
-          <span style={{fontSize:12,color:'var(--text3)'}}>{rows.length} terms · 0 orders</span>
+          <span style={{fontSize:11,fontFamily:'var(--mono)',color:'var(--gray-dim)'}}>{rows.length} terms · 0 orders</span>
           {showAsinFilter&&<>
-            <span style={{fontSize:11,color:'var(--text3)'}}>·</span>
+            <span style={{fontSize:11,color:'var(--gray-dim)'}}>·</span>
             {[['all','All',rows.length],['keyword','Keywords',kwCount],['asin','ASINs',asinCount]].map(([v,l,n])=>(
-              <button key={v} onClick={()=>setTypeFilter(v)} style={{fontSize:11,padding:'3px 10px',borderRadius:'var(--radius)',border:'1px solid var(--border2)',background:typeFilter===v?'var(--text)':'var(--surface)',color:typeFilter===v?'var(--bg)':'var(--text2)',cursor:'pointer',fontWeight:typeFilter===v?500:400}}>
-                {l} <span style={{opacity:.6}}>{n}</span>
+              <button key={v} onClick={()=>setTypeFilter(v)} className={`vtab${typeFilter===v?' on':''}`}>
+                {l} <span style={{opacity:.6,fontFamily:'var(--mono)'}}>{n}</span>
               </button>
             ))}
           </>}
           {showCampFilter&&<>
-            <span style={{fontSize:11,color:'var(--text3)'}}>·</span>
-            <span style={{fontSize:12,color:'var(--text2)'}}>Campaign:</span>
-            <select value={campFilter} onChange={e=>setCampFilter(e.target.value)} style={{fontSize:11,padding:'4px 8px',border:'1px solid var(--border2)',borderRadius:'var(--radius)',background:'var(--surface)',color:'var(--text)',outline:'none'}}>
+            <span style={{fontSize:11,color:'var(--gray-dim)'}}>·</span>
+            <span style={{fontSize:12,color:'var(--gray)'}}>Campaign:</span>
+            <select value={campFilter} onChange={e=>setCampFilter(e.target.value)} className="filter-input" style={{width:'auto',maxWidth:260}}>
               <option value="all">All ({rows.length})</option>
               {camps.map(c=><option key={c} value={c}>{c}</option>)}
             </select>
@@ -343,8 +391,8 @@ function WastedTab({topWasted,showType,showCampFilter,showAsinFilter=true,export
         </div>
         <CopyBtn getItems={()=>sorted.map(r=>r.searchTerm)} label="Copy search terms"/>
       </div>
-      <div style={{overflowX:'auto',borderRadius:'var(--radius)',border:'1px solid var(--border)'}}>
-        <table>
+      <div className="tbl-wrap">
+        <table className="tbl">
           <thead><tr>
             <TH l="#"           c="rank"       sc={col} sd={dir} tg={toggle} w={36}/>
             <TH l="Campaign"    c="campaign"   sc={col} sd={dir} tg={toggle}/>
@@ -357,15 +405,15 @@ function WastedTab({topWasted,showType,showCampFilter,showAsinFilter=true,export
           </tr></thead>
           <tbody>
             {sorted.map((r,i)=>(
-              <tr key={i} style={{background:i%2?'var(--surface2)':'var(--surface)'}}>
-                <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}} v={r.rank}/>
-                <TD sx={{fontSize:11,color:'var(--text2)',wordBreak:'break-word'}} v={r.campaign}/>
+              <tr key={i}>
+                <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--gray-dim)'}} v={r.rank}/>
+                <TD sx={{fontSize:11,color:'var(--gray)',wordBreak:'break-word'}} v={r.campaign}/>
                 {showType&&<TD v={<Badge v={r.targeting}/>}/>}
-                <TD v={<span style={{display:'inline-block',padding:'2px 7px',borderRadius:4,fontSize:10,fontWeight:600,background:r.termType==='ASIN'?'#f0fdf4':'#f1f0ee',color:r.termType==='ASIN'?'#166534':'#5c5c58'}}>{r.termType}</span>}/>
-                <TD sx={{fontSize:12,wordBreak:'break-word',fontFamily:r.termType==='ASIN'?'var(--mono)':'inherit'}} v={r.searchTerm}/>
+                <TD v={<span style={{display:'inline-block',padding:'2px 7px',borderRadius:4,fontSize:10,fontWeight:500,fontFamily:'var(--mono)',border:'1px solid var(--line)',background:r.termType==='ASIN'?'rgba(62,207,116,.12)':'rgba(255,255,255,.06)',color:r.termType==='ASIN'?'var(--green)':'var(--gray)'}}>{r.termType}</span>}/>
+                <TD sx={{fontSize:12,wordBreak:'break-word',fontFamily:r.termType==='ASIN'?'var(--mono)':'inherit',color:'var(--white)'}} v={r.searchTerm}/>
                 <TD sx={{fontFamily:'var(--mono)',color:'var(--red)',fontWeight:500}} v={fmt$(r.spend)}/>
-                <TD sx={{fontFamily:'var(--mono)',fontSize:11}} v={r.clicks}/>
-                <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}} v={roasS(r.sales,r.spend)}/>
+                <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--white)'}} v={r.clicks}/>
+                <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--gray-dim)'}} v={roasS(r.sales,r.spend)}/>
               </tr>
             ))}
           </tbody>
@@ -394,26 +442,26 @@ function CandsTab({cands,rows,exportName}){
   },[rows]);
 
   if(!cands.length)return(
-    <div style={{padding:56,textAlign:'center',color:'var(--text3)',fontSize:13,lineHeight:2}}>
+    <div style={{padding:56,textAlign:'center',color:'var(--gray-dim)',fontSize:13,lineHeight:2}}>
       No negation candidates meet the current thresholds.<br/>
-      <span style={{fontSize:12}}>Try lowering Min Wasted Spend or Min Occurrences in Config ⚙</span>
+      <span style={{fontSize:12}}>Try lowering Min Wasted Spend or Min Occurrences in Config</span>
     </div>
   );
   return(
     <div>
       <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:12,flexWrap:'wrap'}}>
-        <span style={{fontSize:12,color:'var(--text2)'}}>Campaign:</span>
-        <select value={filter} onChange={e=>{setFilter(e.target.value);setExpanded(null);}} style={{fontSize:11,padding:'5px 10px',border:'1px solid var(--border2)',borderRadius:'var(--radius)',background:'var(--surface)',color:'var(--text)',outline:'none'}}>
+        <span style={{fontSize:12,color:'var(--gray)'}}>Campaign:</span>
+        <select value={filter} onChange={e=>{setFilter(e.target.value);setExpanded(null);}} className="filter-input" style={{width:'auto',maxWidth:280}}>
           <option value="all">All campaigns ({cands.length} candidates)</option>
           {camps.map(c=><option key={c} value={c}>{shortC(c)}</option>)}
         </select>
         <div style={{marginLeft:'auto',display:'flex',gap:8,alignItems:'center'}}>
-          <span style={{fontSize:11,color:'var(--text3)'}}>{filtered.length} shown</span>
+          <span style={{fontSize:11,color:'var(--gray-dim)'}}>{filtered.length} shown</span>
           <CopyBtn getItems={()=>sorted.map(r=>r.tok)} label="Copy tokens"/>
         </div>
       </div>
-      <div style={{overflowX:'auto',borderRadius:'var(--radius)',border:'1px solid var(--border)'}}>
-        <table>
+      <div className="tbl-wrap">
+        <table className="tbl">
           <thead><tr>
             <TH l="#"          c="rank" sc={col} sd={dir} tg={toggle} w={32}/>
             <TH l="Campaign"   c="camp" sc={col} sd={dir} tg={toggle}/>
@@ -431,46 +479,43 @@ function CandsTab({cands,rows,exportName}){
               const isExp=expanded===i;
               const mode=expandMode[i]||'evidence';
               const convTerms=isExp&&mode==='converting'?getConvTerms(r.tok,r.camp):[];
-              const rowBg=i%2?'var(--surface2)':'var(--surface)';
               return(
                 <React.Fragment key={i}>
-                  <tr onClick={()=>setExpanded(isExp?null:i)} style={{background:rowBg,cursor:'pointer'}} title="Click to expand">
-                    <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}} v={r.rank}/>
-                    <TD sx={{fontSize:11,color:'var(--text2)',wordBreak:'break-word'}} v={r.camp}/>
-                    <TD sx={{fontWeight:500,fontSize:12}} v={r.tok}/>
-                    <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right'}} v={r.occ}/>
-                    <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right'}} v={r.o0}/>
+                  <tr onClick={()=>setExpanded(isExp?null:i)} style={{cursor:'pointer'}} title="Click to expand">
+                    <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--gray-dim)'}} v={r.rank}/>
+                    <TD sx={{fontSize:11,color:'var(--gray)',wordBreak:'break-word'}} v={r.camp}/>
+                    <TD sx={{fontWeight:500,fontSize:12,color:'var(--white)'}} v={r.tok}/>
+                    <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right',color:'var(--white)'}} v={r.occ}/>
+                    <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right',color:'var(--white)'}} v={r.o0}/>
                     <TD sx={{fontFamily:'var(--mono)',color:'var(--red)',fontWeight:500}} v={fmt$(r.ws)}/>
                     <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:r.ov===0?'var(--green)':'var(--amber)'}} v={pct(r.ov)}/>
                     <TD sx={{fontFamily:'var(--mono)',color:'var(--red)',fontWeight:500}} v={fmtN(r.ni)}/>
                     <TD v={<Badge v={r.mr}/>}/>
-                    <TD sx={{fontSize:11,color:'var(--text2)',lineHeight:1.7}} v={
-                      isExp
-                        ? <span style={{color:'var(--text3)',fontSize:10}}>↑ collapse</span>
-                        : <span style={{color:'var(--text3)',fontSize:10}}>↓ expand</span>
+                    <TD sx={{fontSize:11,color:'var(--gray)',lineHeight:1.7}} v={
+                      <span style={{color:'var(--gray-dim)',fontSize:10,fontFamily:'var(--mono)'}}>{isExp?'↑ collapse':'↓ expand'}</span>
                     }/>
                   </tr>
                   {isExp&&(
-                    <tr style={{background:i%2?'#eeede9':'#f5f4f1'}}>
-                      <td colSpan={10} style={{padding:'10px 16px',borderBottom:'1px solid var(--border)'}}>
+                    <tr>
+                      <td colSpan={10} style={{padding:'10px 16px',borderBottom:'1px solid var(--line-soft)',background:'var(--ink)'}}>
                         {/* toggle buttons */}
                         <div style={{display:'flex',gap:6,marginBottom:10}}>
                           <button onClick={e=>{e.stopPropagation();setExpandMode(m=>({...m,[i]:'evidence'}));}}
-                            style={{fontSize:11,padding:'3px 10px',borderRadius:'var(--radius)',border:'1px solid var(--border2)',background:mode==='evidence'?'var(--text)':'var(--surface)',color:mode==='evidence'?'var(--bg)':'var(--text2)',cursor:'pointer',fontWeight:mode==='evidence'?500:400}}>
+                            className={`vtab${mode==='evidence'?' on':''}`}>
                             Wasted queries
                           </button>
                           {r.ov>0&&<button onClick={e=>{e.stopPropagation();setExpandMode(m=>({...m,[i]:'converting'}));}}
-                            style={{fontSize:11,padding:'3px 10px',borderRadius:'var(--radius)',border:'1px solid var(--border2)',background:mode==='converting'?'var(--text)':'var(--surface)',color:mode==='converting'?'var(--bg)':'var(--text2)',cursor:'pointer',fontWeight:mode==='converting'?500:400}}>
+                            className={`vtab${mode==='converting'?' on':''}`}>
                             Converting terms <span style={{opacity:.7,fontFamily:'var(--mono)'}}>{Math.round(r.ov*0.01*(rows?.filter(x=>x.orders>0&&x.campaign===r.camp).length||0))||''}</span>
                           </button>}
                         </div>
                         {/* evidence panel */}
                         {mode==='evidence'&&(
                           <div>
-                            <div style={{fontSize:11,color:'var(--text3)',marginBottom:6,textTransform:'uppercase',letterSpacing:'.04em'}}>Top wasted queries containing "{r.tok}"</div>
+                            <div style={{fontSize:11,color:'var(--gray-dim)',marginBottom:6,textTransform:'uppercase',letterSpacing:'.04em',fontFamily:'var(--mono)'}}>Top wasted queries containing "{r.tok}"</div>
                             {r.ev.map((e,j)=>(
-                              <div key={j} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:j<r.ev.length-1?'0.5px solid var(--border)':'none',fontSize:12}}>
-                                <span style={{color:'var(--text2)'}}>{e.t}</span>
+                              <div key={j} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:j<r.ev.length-1?'1px solid var(--line-soft)':'none',fontSize:12}}>
+                                <span style={{color:'var(--gray)'}}>{e.t}</span>
                                 <span style={{fontFamily:'var(--mono)',color:'var(--red)',fontWeight:500,marginLeft:16}}>{fmt$(e.s)}</span>
                               </div>
                             ))}
@@ -479,12 +524,12 @@ function CandsTab({cands,rows,exportName}){
                         {/* converting terms panel */}
                         {mode==='converting'&&(
                           <div>
-                            <div style={{fontSize:11,color:'var(--text3)',marginBottom:6,textTransform:'uppercase',letterSpacing:'.04em'}}>Converting search terms containing "{r.tok}"</div>
-                            {convTerms.length===0&&<div style={{fontSize:12,color:'var(--text3)'}}>No converting terms found.</div>}
+                            <div style={{fontSize:11,color:'var(--gray-dim)',marginBottom:6,textTransform:'uppercase',letterSpacing:'.04em',fontFamily:'var(--mono)'}}>Converting search terms containing "{r.tok}"</div>
+                            {convTerms.length===0&&<div style={{fontSize:12,color:'var(--gray-dim)'}}>No converting terms found.</div>}
                             {convTerms.map((t,j)=>(
-                              <div key={j} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'4px 0',borderBottom:j<convTerms.length-1?'0.5px solid var(--border)':'none',fontSize:12}}>
-                                <span style={{color:'var(--text2)',flex:1}}>{t.term}</span>
-                                <span style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)',marginLeft:12}}>{t.orders} ord</span>
+                              <div key={j} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'4px 0',borderBottom:j<convTerms.length-1?'1px solid var(--line-soft)':'none',fontSize:12}}>
+                                <span style={{color:'var(--gray)',flex:1}}>{t.term}</span>
+                                <span style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--gray-dim)',marginLeft:12}}>{t.orders} ord</span>
                                 <span style={{fontFamily:'var(--mono)',color:'var(--green)',fontWeight:500,marginLeft:12}}>{fmt$(t.sales)}</span>
                               </div>
                             ))}
@@ -499,7 +544,7 @@ function CandsTab({cands,rows,exportName}){
           </tbody>
         </table>
       </div>
-      <div style={{fontSize:11,color:'var(--text3)',marginTop:6,textAlign:'right'}}>Click any row to expand · rows with Conv % &gt; 0 show converting terms</div>
+      <div className="tbl-note">Click any row to expand · rows with Conv % &gt; 0 show converting terms</div>
     </div>
   );
 }
@@ -522,8 +567,7 @@ function TokenImpactTab({tokens}){
       {/* view switcher */}
       <div style={{display:'flex',gap:6,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
         {TOKEN_VIEWS.map(v=>(
-          <button key={v.id} onClick={()=>setView(v.id)} title={v.help}
-            style={{fontSize:11,padding:'5px 13px',borderRadius:'var(--radius)',border:'1px solid var(--border2)',background:view===v.id?'var(--text)':'var(--surface)',color:view===v.id?'var(--bg)':'var(--text2)',cursor:'pointer',fontWeight:view===v.id?500:400,transition:'all .1s'}}>
+          <button key={v.id} onClick={()=>setView(v.id)} title={v.help} className={`vtab${view===v.id?' on':''}`}>
             {v.label}
             <span style={{marginLeft:5,opacity:.6,fontFamily:'var(--mono)',fontSize:10}}>{(tokens[v.id]||[]).length}</span>
           </button>
@@ -535,7 +579,7 @@ function TokenImpactTab({tokens}){
 
       {/* summary callout */}
       {rows.length>0&&(
-        <div style={{marginBottom:14,padding:'10px 14px',background:isWorst?'#fff5f5':'#f0fdf4',border:`1px solid ${isWorst?'#fecaca':'#bbf7d0'}`,borderRadius:'var(--radius)',fontSize:12,color:isWorst?'var(--red)':'var(--green)'}}>
+        <div style={{marginBottom:14,padding:'10px 14px',background:isWorst?'rgba(240,82,82,.08)':'rgba(62,207,116,.08)',border:`1px solid ${isWorst?'rgba(240,82,82,.25)':'rgba(62,207,116,.25)'}`,borderRadius:'var(--radius)',fontSize:12,color:isWorst?'var(--red)':'var(--green)'}}>
           {isWorst
             ? `Top offender: "${rows[0].tok}" — ${fmtN(rows[0].netImpact)} net impact across ${rows[0].occ} queries`
             : `Top contributor: "${rows[0].tok}" — ${fmtN(rows[0].netImpact)} net impact across ${rows[0].occ} queries`}
@@ -543,12 +587,12 @@ function TokenImpactTab({tokens}){
       )}
 
       {rows.length===0&&(
-        <div style={{padding:48,textAlign:'center',color:'var(--text3)',fontSize:13}}>No tokens meet the minimum occurrence threshold for this view.</div>
+        <div style={{padding:48,textAlign:'center',color:'var(--gray-dim)',fontSize:13}}>No tokens meet the minimum occurrence threshold for this view.</div>
       )}
 
       {rows.length>0&&(
-        <div style={{overflowX:'auto',borderRadius:'var(--radius)',border:'1px solid var(--border)'}}>
-          <table>
+        <div className="tbl-wrap">
+          <table className="tbl">
             <thead><tr>
               <TH l="#"            c="rank"      sc={col} sd={dir} tg={toggle} w={32}/>
               <TH l="Token"        c="tok"       sc={col} sd={dir} tg={toggle} w={120}/>
@@ -564,26 +608,26 @@ function TokenImpactTab({tokens}){
             </tr></thead>
             <tbody>
               {sorted.map((r,i)=>(
-                <tr key={i} style={{background:i%2?'var(--surface2)':'var(--surface)'}}>
-                  <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}} v={r.rank}/>
-                  <TD sx={{fontWeight:500,fontSize:12}} v={r.tok}/>
-                  <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right'}} v={r.occ}/>
+                <tr key={i}>
+                  <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--gray-dim)'}} v={r.rank}/>
+                  <TD sx={{fontWeight:500,fontSize:12,color:'var(--white)'}} v={r.tok}/>
+                  <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right',color:'var(--white)'}} v={r.occ}/>
                   <TD sx={{fontFamily:'var(--mono)',color:'var(--red)',fontWeight:500}} v={r.wSp>0?fmt$(r.wSp):'—'}/>
                   <TD sx={{fontFamily:'var(--mono)',color:'var(--green)'}} v={r.cSal>0?fmt$(r.cSal):'—'}/>
-                  <TD sx={{fontFamily:'var(--mono)'}} v={r.cSp>0?fmt$(r.cSp):'—'}/>
-                  <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right'}} v={r.cOrd||'—'}/>
+                  <TD sx={{fontFamily:'var(--mono)',color:'var(--white)'}} v={r.cSp>0?fmt$(r.cSp):'—'}/>
+                  <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right',color:'var(--white)'}} v={r.cOrd||'—'}/>
                   <TD sx={{fontFamily:'var(--mono)',color:r.surplus>=0?'var(--green)':'var(--red)',fontWeight:500}} v={fmtN(r.surplus)}/>
                   <TD sx={{fontFamily:'var(--mono)',color:r.netImpact>=0?'var(--green)':'var(--red)',fontWeight:600}} v={fmtN(r.netImpact)}/>
-                  <TD sx={{fontFamily:'var(--mono)'}} v={r.tRoas>0?r.tRoas.toFixed(2)+'×':'—'}/>
-                  <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text2)'}} v={pct(r.cOverlap)}/>
+                  <TD sx={{fontFamily:'var(--mono)',color:'var(--white)'}} v={r.tRoas>0?r.tRoas.toFixed(2)+'×':'—'}/>
+                  <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--gray)'}} v={pct(r.cOverlap)}/>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
-      <div style={{fontSize:11,color:'var(--text3)',marginTop:8,lineHeight:1.6}}>
-        Protected tokens (brand, core product terms, top converters) are excluded. Min occurrences: unigrams ≥ 5, phrases ≥ 3.
+      <div style={{fontSize:11,color:'var(--gray-dim)',marginTop:8,lineHeight:1.6}}>
+        Protected tokens (brand, core product terms, top converters) are excluded. Min occurrences: unigrams &gt;= 5, phrases &gt;= 3.
       </div>
     </div>
   );
@@ -598,24 +642,24 @@ function ConfigPanel({cfg,setCfg,onClose}){
     {k:'TOP_N',l:'Top N results',min:10,max:50,step:5,d:'Max rows per output table'},
   ];
   return(
-    <div style={{position:'fixed',top:0,right:0,height:'100%',width:300,background:'var(--surface)',borderLeft:'1px solid var(--border2)',zIndex:100,padding:24,overflowY:'auto',boxShadow:'-4px 0 24px rgba(0,0,0,.08)'}}>
+    <div style={{position:'fixed',top:0,right:0,height:'100%',width:300,background:'var(--card)',borderLeft:'1px solid var(--line)',zIndex:100,padding:24,overflowY:'auto',boxShadow:'-4px 0 32px rgba(0,0,0,.6)'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:24}}>
-        <span style={{fontWeight:500,fontSize:15}}>Configuration</span>
-        <button onClick={onClose} style={{background:'none',border:'none',fontSize:20,color:'var(--text3)',cursor:'pointer',lineHeight:1}}>×</button>
+        <span style={{fontWeight:600,fontSize:15,color:'var(--white)'}}>Configuration</span>
+        <button onClick={onClose} style={{background:'none',border:'none',fontSize:20,color:'var(--gray)',cursor:'pointer',lineHeight:1}}>×</button>
       </div>
       {fields.map(f=>(
         <div key={f.k} style={{marginBottom:20}}>
           <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
-            <label style={{fontSize:12,fontWeight:500}}>{f.l}</label>
-            <span style={{fontFamily:'var(--mono)',fontSize:12,color:'var(--text2)'}}>{loc[f.k]}</span>
+            <label style={{fontSize:12,fontWeight:500,color:'var(--white)'}}>{f.l}</label>
+            <span style={{fontFamily:'var(--mono)',fontSize:12,color:'var(--gray)'}}>{loc[f.k]}</span>
           </div>
-          <input type="range" min={f.min} max={f.max} step={f.step} value={loc[f.k]} onChange={e=>setLoc(v=>({...v,[f.k]:+e.target.value}))} style={{width:'100%',accentColor:'var(--text)',marginBottom:4}}/>
-          <div style={{fontSize:11,color:'var(--text3)'}}>{f.d}</div>
+          <input type="range" min={f.min} max={f.max} step={f.step} value={loc[f.k]} onChange={e=>setLoc(v=>({...v,[f.k]:+e.target.value}))} style={{width:'100%',accentColor:'var(--green)',marginBottom:4}}/>
+          <div style={{fontSize:11,color:'var(--gray-dim)'}}>{f.d}</div>
         </div>
       ))}
       <div style={{display:'flex',gap:8,marginTop:24}}>
-        <button onClick={()=>{setCfg(loc);onClose();}} style={{flex:1,padding:'9px 0',background:'var(--text)',color:'var(--bg)',border:'none',borderRadius:'var(--radius)',fontWeight:500,fontSize:13,cursor:'pointer'}}>Apply & rerun</button>
-        <button onClick={onClose} style={{flex:1,padding:'9px 0',background:'transparent',border:'1px solid var(--border2)',borderRadius:'var(--radius)',fontSize:13,cursor:'pointer',color:'var(--text2)'}}>Cancel</button>
+        <button onClick={()=>{setCfg(loc);onClose();}} className="btn-primary" style={{flex:1,padding:'9px 0'}}>Apply & rerun</button>
+        <button onClick={onClose} className="btn-secondary" style={{flex:1,padding:'9px 0'}}>Cancel</button>
       </div>
     </div>
   );
@@ -742,13 +786,13 @@ function GapAnalysisSection({strRows, brand}){
   const phraseOnly=gaps.filter(g=>g.coverage==='Phrase only').length;
   const broadOnly=gaps.filter(g=>g.coverage==='Broad only').length;
   const gapSales=gaps.filter(g=>g.coverage==='Not targeted').reduce((s,r)=>s+r.sales,0);
-  const COVER_COLORS={'Not targeted':['#fee2e2','#991b1b'],'Phrase only':['#fef9c3','#854d0e'],'Broad only':['#fef3c7','#92400e']};
+  const COVER_COLORS={'Not targeted':['rgba(240,82,82,.12)','var(--red)'],'Phrase only':['rgba(232,200,64,.12)','var(--amber)'],'Broad only':['rgba(255,255,255,.08)','var(--white)']};
 
-  if(!gaps.length) return <div style={{padding:60,textAlign:'center',color:'var(--text3)',fontSize:13}}>No gap recommendations found — all converting search terms are already explicitly targeted.</div>;
+  if(!gaps.length) return <div style={{padding:60,textAlign:'center',color:'var(--gray-dim)',fontSize:13}}>No gap recommendations found — all converting search terms are already explicitly targeted.</div>;
 
   return(
     <div>
-      <div style={{marginBottom:18,padding:'12px 16px',background:'#f0f9ff',border:'1px solid #bae6fd',borderRadius:'var(--radius)',fontSize:12,color:'#0369a1',lineHeight:1.6}}>
+      <div className="hint-box" style={{marginBottom:18}}>
         Built from the STR you already uploaded — no second file needed. Targets are identified from the STR's Targeting column. Any term already covered by an exact keyword or PAT target is excluded.
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:12,marginBottom:20}}>
@@ -758,43 +802,43 @@ function GapAnalysisSection({strRows, brand}){
           {l:'Broad only',v:broadOnly+' terms',s:'Suggest adding phrase',a:'var(--amber)'},
           {l:'Total gaps',v:gaps.length+' terms',s:'Across all match types',a:null},
         ].map(c=>(
-          <div key={c.l} style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'var(--radius)',padding:'14px 16px'}}>
-            <div style={{fontSize:11,color:'var(--text3)',marginBottom:4,textTransform:'uppercase',letterSpacing:'.04em'}}>{c.l}</div>
-            <div style={{fontSize:20,fontWeight:500,fontFamily:'var(--mono)',color:c.a||'var(--text)'}}>{c.v}</div>
-            <div style={{fontSize:11,color:'var(--text3)',marginTop:3}}>{c.s}</div>
+          <div key={c.l} className="card">
+            <div className="mc-lbl">{c.l}</div>
+            <div className="mc-val" style={{color:c.a||'var(--white)'}}>{c.v}</div>
+            <div className="mc-prior neu">{c.s}</div>
           </div>
         ))}
       </div>
 
       <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:12,flexWrap:'wrap'}}>
-        <span style={{fontSize:12,color:'var(--text2)'}}>Coverage:</span>
-        <select value={coverFilter} onChange={e=>setCoverFilter(e.target.value)} style={{fontSize:11,padding:'5px 10px',border:'1px solid var(--border2)',borderRadius:'var(--radius)',background:'var(--surface)',color:'var(--text)',outline:'none'}}>
+        <span style={{fontSize:12,color:'var(--gray)'}}>Coverage:</span>
+        <select value={coverFilter} onChange={e=>setCoverFilter(e.target.value)} className="filter-input" style={{width:'auto'}}>
           <option value="all">All gaps ({gaps.length})</option>
           <option value="Not targeted">Not targeted ({notTargeted})</option>
           <option value="Phrase only">Phrase only ({phraseOnly})</option>
           <option value="Broad only">Broad only ({broadOnly})</option>
         </select>
-        <span style={{fontSize:12,color:'var(--text2)',marginLeft:4}}>Campaign:</span>
-        <select value={campFilter} onChange={e=>setCampFilter(e.target.value)} style={{fontSize:11,padding:'5px 10px',border:'1px solid var(--border2)',borderRadius:'var(--radius)',background:'var(--surface)',color:'var(--text)',outline:'none'}}>
+        <span style={{fontSize:12,color:'var(--gray)',marginLeft:4}}>Campaign:</span>
+        <select value={campFilter} onChange={e=>setCampFilter(e.target.value)} className="filter-input" style={{width:'auto',maxWidth:260}}>
           <option value="all">All campaigns</option>
           {allCamps.map(c=><option key={c} value={c}>{shortC(c)}</option>)}
         </select>
-        <span style={{fontSize:11,color:'var(--text3)'}}>·</span>
+        <span style={{fontSize:11,color:'var(--gray-dim)'}}>·</span>
         {[['all','All',gaps.length],['keyword','Keywords',kwCount],['asin','ASINs',asinCount]].map(([v,l,n])=>(
-          <button key={v} onClick={()=>setTypeFilter(v)} style={{fontSize:11,padding:'3px 10px',borderRadius:'var(--radius)',border:'1px solid var(--border2)',background:typeFilter===v?'var(--text)':'var(--surface)',color:typeFilter===v?'var(--bg)':'var(--text2)',cursor:'pointer',fontWeight:typeFilter===v?500:400}}>
-            {l} <span style={{opacity:.6}}>{n}</span>
+          <button key={v} onClick={()=>setTypeFilter(v)} className={`vtab${typeFilter===v?' on':''}`}>
+            {l} <span style={{opacity:.6,fontFamily:'var(--mono)'}}>{n}</span>
           </button>
         ))}
         <div style={{marginLeft:'auto',display:'flex',gap:8,alignItems:'center'}}>
-          <span style={{fontSize:11,color:'var(--text3)'}}>{filtered.length} shown</span>
+          <span style={{fontSize:11,color:'var(--gray-dim)'}}>{filtered.length} shown</span>
           <CopyBtn getItems={()=>sorted.map(r=>r.term)} label="Copy targets"/>
         </div>
       </div>
 
       {sorted.length===0
-        ?<div style={{padding:48,textAlign:'center',color:'var(--text3)',fontSize:13}}>No gaps for the current filters.</div>
-        :<div style={{overflowX:'auto',borderRadius:'var(--radius)',border:'1px solid var(--border)'}}>
-          <table>
+        ?<div style={{padding:48,textAlign:'center',color:'var(--gray-dim)',fontSize:13}}>No gaps for the current filters.</div>
+        :<div className="tbl-wrap">
+          <table className="tbl">
             <thead><tr>
               <TH l="#"                   c="rank"          sc={col} sd={dir} tg={toggle} w={32}/>
               <TH l="Search term"         c="term"          sc={col} sd={dir} tg={toggle}/>
@@ -807,24 +851,24 @@ function GapAnalysisSection({strRows, brand}){
             </tr></thead>
             <tbody>
               {sorted.map((r,i)=>{
-                const[bg,tx]=COVER_COLORS[r.coverage]||['var(--surface2)','var(--text2)'];
+                const[bg,tx]=COVER_COLORS[r.coverage]||['rgba(255,255,255,.06)','var(--gray)'];
                 return(
-                  <tr key={i} style={{background:i%2?'var(--surface2)':'var(--surface)'}}>
-                    <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}} v={r.rank}/>
-                    <TD sx={{fontSize:12,fontWeight:500,wordBreak:'break-word',fontFamily:r.isAsin?'var(--mono)':'inherit'}} v={r.term}/>
-                    <TD v={<span style={{display:'inline-block',padding:'2px 8px',borderRadius:4,fontSize:11,fontWeight:600,background:bg,color:tx,whiteSpace:'nowrap'}}>{r.coverage}</span>}/>
-                    <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right'}} v={r.orders}/>
+                  <tr key={i}>
+                    <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--gray-dim)'}} v={r.rank}/>
+                    <TD sx={{fontSize:12,fontWeight:500,wordBreak:'break-word',fontFamily:r.isAsin?'var(--mono)':'inherit',color:'var(--white)'}} v={r.term}/>
+                    <TD v={<span style={{display:'inline-block',padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:500,fontFamily:'var(--mono)',border:'1px solid var(--line)',background:bg,color:tx,whiteSpace:'nowrap'}}>{r.coverage}</span>}/>
+                    <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right',color:'var(--white)'}} v={r.orders}/>
                     <TD sx={{fontFamily:'var(--mono)',color:'var(--green)',fontWeight:500}} v={fmt$(r.sales)}/>
-                    <TD sx={{fontFamily:'var(--mono)'}} v={r.roas>0?r.roas.toFixed(2)+'×':'—'}/>
+                    <TD sx={{fontFamily:'var(--mono)',color:'var(--white)'}} v={r.roas>0?r.roas.toFixed(2)+'×':'—'}/>
                     <TD v={<Badge v={r.suggestedMatch}/>}/>
-                    <TD sx={{fontSize:11,color:'var(--text2)',lineHeight:1.7}} v={r.campaigns.map(c=><div key={c} style={{wordBreak:'break-word'}}>{c}</div>)}/>
+                    <TD sx={{fontSize:11,color:'var(--gray)',lineHeight:1.7}} v={r.campaigns.map(c=><div key={c} style={{wordBreak:'break-word'}}>{c}</div>)}/>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>}
-      <div style={{fontSize:11,color:'var(--text3)',marginTop:8,lineHeight:1.6}}>
+      <div style={{fontSize:11,color:'var(--gray-dim)',marginTop:8,lineHeight:1.6}}>
         "Not targeted" = no keyword or ASIN target matches this term. "Phrase only" = covered by phrase match but no exact. "Broad only" = broad word overlap only.
       </div>
     </div>
@@ -839,7 +883,7 @@ const SECTIONS=[
 ];
 
 function Empty({msg}){
-  return <div style={{padding:64,textAlign:'center',color:'var(--text3)',fontSize:13,lineHeight:2}}>{msg}<br/><span style={{fontSize:12}}>This report may not contain rows with this match type.</span></div>;
+  return <div style={{padding:64,textAlign:'center',color:'var(--gray-dim)',fontSize:13,lineHeight:2}}>{msg}<br/><span style={{fontSize:12}}>This report may not contain rows with this match type.</span></div>;
 }
 
 function App(){
@@ -886,30 +930,37 @@ function App(){
 
   // ── Upload ──
   if(step==='upload')return(
-    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:'2rem 1rem',background:'var(--bg)'}}>
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:'2rem 1rem',background:'var(--black)'}}>
       <div style={{width:'100%',maxWidth:480}}>
         <div style={{textAlign:'center',marginBottom:28}}>
-          <div style={{fontSize:24,fontWeight:500,marginBottom:8,letterSpacing:'-.01em'}}>Negative mining tool</div>
-          <div style={{fontSize:14,color:'var(--text2)',lineHeight:1.6}}>Upload a Search Term Report to surface wasted spend<br/>and actionable negation candidates.</div>
+          <div className="app-title" style={{marginBottom:10}}>Negative Mining Tool</div>
+          <div style={{fontSize:14,color:'var(--gray)',lineHeight:1.6}}>Upload a Search Term Report to surface wasted spend<br/>and actionable negation candidates.</div>
         </div>
-        <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'24px 28px',boxShadow:'0 2px 12px rgba(0,0,0,.06)',marginBottom:12}}>
-          <label style={{fontSize:12,fontWeight:500,display:'block',marginBottom:6,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'.04em'}}>Brand name</label>
+        <div className="card" style={{padding:'24px 28px',marginBottom:12}}>
+          <div className="slbl">Brand Name</div>
           <input
             value={brand}
             onChange={e=>setBrand(e.target.value)}
             placeholder=""
-            style={{width:'100%',padding:'10px 12px',fontSize:13,border:'1px solid var(--border2)',borderRadius:'var(--radius)',background:'var(--bg)',color:'var(--text)',outline:'none'}}
+            style={{width:'100%',padding:'10px 12px',fontSize:13,border:'1px solid var(--line)',borderRadius:'var(--radius)',background:'var(--ink)',color:'var(--white)',outline:'none'}}
           />
-          <div style={{fontSize:11,color:'var(--text3)',marginTop:6}}>Used to protect brand keywords from being flagged as negatives.</div>
+          <div style={{fontSize:11,color:'var(--gray-dim)',marginTop:6}}>Used to protect brand keywords from being flagged as negatives.</div>
         </div>
         <div onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)} onDrop={handleDrop} onClick={()=>fileRef.current?.click()}
-          style={{border:`2px dashed ${dragging?'var(--text)':'var(--border2)'}`,borderRadius:'var(--radius-lg)',padding:'52px 24px',textAlign:'center',cursor:'pointer',background:dragging?'var(--surface2)':'var(--surface)',transition:'all .15s',boxShadow:'0 2px 12px rgba(0,0,0,.06)'}}>
+          className={`dz${dragging?' ok':''}`} style={{padding:'52px 24px'}}>
           {processing
-            ?<><div style={{fontSize:32,marginBottom:12}}>⏳</div><div style={{fontSize:14,color:'var(--text2)'}}>Analyzing your report…</div></>
-            :<><div style={{fontSize:40,marginBottom:14}}>📊</div><div style={{fontSize:15,fontWeight:500,marginBottom:8}}>Drop your Search Term Report here</div><div style={{fontSize:13,color:'var(--text2)'}}>Supports .xlsx and .csv · Click to browse</div></>}
+            ?<>
+              <div style={{color:'var(--gray)',marginBottom:12,display:'flex',justifyContent:'center'}}><IconLoader/></div>
+              <div className="dz-sub">Analyzing your report…</div>
+            </>
+            :<>
+              <div style={{color:'var(--gray)',marginBottom:14,display:'flex',justifyContent:'center'}}><IconUpload/></div>
+              <div className="dz-title">Drop your Search Term Report here</div>
+              <div className="dz-sub">Supports .xlsx and .csv · Click to browse</div>
+            </>}
         </div>
         <input ref={fileRef} type="file" accept=".xlsx,.csv" style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(f)handleFile(f);}}/>
-        <div style={{marginTop:14,fontSize:11,color:'var(--text3)',textAlign:'center',lineHeight:1.6}}>Required: Campaign Name · Targeting · Match Type · Customer Search Term<br/>Spend · 7 Day Total Sales · 7 Day Total Orders</div>
+        <div className="upload-desc-sub" style={{marginTop:14,textAlign:'center',lineHeight:1.6}}>Required: Campaign Name · Targeting · Match Type · Customer Search Term<br/>Spend · 7 Day Total Sales · 7 Day Total Orders</div>
       </div>
     </div>
   );
@@ -928,39 +979,37 @@ function App(){
   const candFor=s=>s==='auto'?autoR?.cands?.length||0:s==='phrase'?phraseR?.cands?.length||0:broadR?.cands?.length||0;
 
   return(
-    <div style={{minHeight:'100vh',background:'var(--bg)'}}>
+    <div style={{minHeight:'100vh',background:'var(--black)'}}>
 
       {/* top bar */}
-      <div style={{borderBottom:'1px solid var(--border)',padding:'12px 24px',display:'flex',alignItems:'center',gap:12,background:'var(--surface)',position:'sticky',top:0,zIndex:20,flexWrap:'wrap'}}>
+      <div style={{borderBottom:'1px solid var(--line)',padding:'14px 24px',display:'flex',alignItems:'center',gap:12,background:'var(--ink)',position:'sticky',top:0,zIndex:20,flexWrap:'wrap'}}>
         <div style={{flex:1,minWidth:0}}>
-          <span style={{fontWeight:500,fontSize:15}}>{brand||'Negative mining tool'}</span>
-          <span style={{fontSize:12,color:'var(--text2)',marginLeft:10}}>{fileName}</span>
-          <span style={{fontSize:11,color:'var(--text3)',marginLeft:8,fontFamily:'var(--mono)'}}>
+          <span className="app-title" style={{fontSize:16}}>{brand||'Negative Mining Tool'}</span>
+          <span style={{fontSize:12,color:'var(--gray)',marginLeft:10}}>{fileName}</span>
+          <span style={{fontSize:11,color:'var(--gray-dim)',marginLeft:8,fontFamily:'var(--mono)'}}>
             {rawRows.length.toLocaleString()} rows · {autoR?fmt$(autoR.snap.wastedSp)+' Auto wasted':'no Auto rows'}
           </span>
         </div>
-        <button onClick={()=>{setStep('upload');setResults(null);setRawRows([]);}} style={{fontSize:12,padding:'5px 12px',border:'1px solid var(--border2)',borderRadius:'var(--radius)',background:'var(--surface)',color:'var(--text2)',cursor:'pointer'}}>New file</button>
-        <button onClick={()=>setShowCfg(v=>!v)} style={{fontSize:12,padding:'5px 12px',border:'1px solid var(--border2)',borderRadius:'var(--radius)',background:showCfg?'var(--surface2)':'var(--surface)',color:'var(--text2)',cursor:'pointer'}}>⚙ Config</button>
+        <button onClick={()=>{setStep('upload');setResults(null);setRawRows([]);}} className="btn-secondary">New file</button>
+        <button onClick={()=>setShowCfg(v=>!v)} className={showCfg?'btn-primary':'btn-secondary'}>Config</button>
       </div>
 
-      {/* section nav: AUTO / Phrase / Broad */}
-      <div style={{borderBottom:'1px solid var(--border)',display:'flex',padding:'0 24px',background:'var(--surface)'}}>
+      {/* section nav: Auto / Phrase / Broad / Gap analysis */}
+      <div className="top-nav" style={{padding:'16px 24px 0',marginBottom:0,borderBottom:'1px solid var(--line)',background:'var(--black)'}}>
         {SECTIONS.map(sec=>(
-          <button key={sec.id} onClick={()=>handleSection(sec.id)}
-            style={{padding:'10px 16px',fontSize:13,fontWeight:section===sec.id?500:400,background:'transparent',border:'none',borderBottom:section===sec.id?'2px solid var(--text)':'2px solid transparent',cursor:'pointer',color:section===sec.id?'var(--text)':'var(--text2)',display:'flex',alignItems:'center',gap:7,marginBottom:-1,whiteSpace:'nowrap'}}>
+          <button key={sec.id} onClick={()=>handleSection(sec.id)} className={`tnav${section===sec.id?' on':''}`} style={{display:'flex',alignItems:'center',gap:7}}>
             {sec.label}
-            <span style={{fontSize:10,fontFamily:'var(--mono)',background:'var(--surface2)',padding:'1px 6px',borderRadius:10,color:'var(--text3)'}}>{countFor(sec.id).toLocaleString()}</span>
+            <span style={{fontSize:10,fontFamily:'var(--mono)',background:section===sec.id?'rgba(0,0,0,.12)':'rgba(255,255,255,.06)',padding:'1px 6px',borderRadius:10,color:section===sec.id?'var(--black)':'var(--gray-dim)'}}>{countFor(sec.id).toLocaleString()}</span>
           </button>
         ))}
       </div>
 
       {/* sub-tab nav — hidden for gap analysis */}
-      {curSec.tabs.length>0&&<div style={{borderBottom:'1px solid var(--border)',display:'flex',padding:'0 24px',background:'var(--surface)'}}>
+      {curSec.tabs.length>0&&<div style={{display:'flex',gap:6,padding:'14px 24px',background:'var(--black)',borderBottom:'1px solid var(--line)',flexWrap:'wrap'}}>
         {curSec.tabs.map(t=>(
-          <button key={t.id} onClick={()=>setTab(t.id)}
-            style={{padding:'8px 14px',fontSize:12,fontWeight:tab===t.id?500:400,background:'transparent',border:'none',borderBottom:tab===t.id?'2px solid var(--text2)':'2px solid transparent',cursor:'pointer',color:tab===t.id?'var(--text)':'var(--text2)',display:'flex',alignItems:'center',gap:6,marginBottom:-1,whiteSpace:'nowrap'}}>
+          <button key={t.id} onClick={()=>setTab(t.id)} className={`stab${tab===t.id?' on':''}`} style={{display:'flex',alignItems:'center',gap:6}}>
             {t.label}
-            {t.id==='cands'&&<span style={{fontSize:10,fontFamily:'var(--mono)',background:'var(--surface2)',padding:'1px 6px',borderRadius:10,color:'var(--text3)'}}>{candFor(section)}</span>}
+            {t.id==='cands'&&<span style={{fontSize:10,fontFamily:'var(--mono)',background:'rgba(255,255,255,.06)',padding:'1px 6px',borderRadius:10,color:'var(--gray-dim)'}}>{candFor(section)}</span>}
           </button>
         ))}
       </div>}
