@@ -6,7 +6,7 @@
 <title>Negative Mining Tool — Amazon PPC</title>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.23.10/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -55,6 +55,126 @@
     position: fixed; inset: 0; pointer-events: none; z-index: 999;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
     background-repeat: repeat; background-size: 128px; opacity: .5;
+  }
+
+  .container { max-width: 1060px; margin: 0 auto; position: relative; z-index: 1; }
+
+  #app-title, .app-title {
+    font-family: var(--sans); font-size: 20px; font-weight: 700;
+    color: var(--white); letter-spacing: .04em; text-transform: uppercase;
+  }
+
+  .results-title { font-family: var(--sans); font-size: 17px; font-weight: 600; color: var(--white); }
+  .results-sub   { font-family: var(--mono); font-size: 11px; color: var(--gray-dim); margin-top: 4px; }
+  .slbl { font-family: var(--mono); font-size: 9px; font-weight: 500; color: var(--gray-dim); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 8px; }
+
+  .card, .chg-card, .metric-card {
+    background: var(--card); border-radius: 10px; padding: 18px;
+    border: 1px solid var(--line);
+  }
+  .card-2 { background: var(--card-2); }
+
+  .mc-lbl { font-family: var(--mono); font-size: 9px; font-weight: 500; color: var(--gray-dim); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+  .mc-val { font-family: var(--mono); font-size: 26px; font-weight: 500; color: var(--white); line-height: 1; }
+  .mc-prior { font-family: var(--mono); font-size: 11px; margin-top: 7px; }
+  .pos { color: var(--green); } .neg { color: var(--red); } .neu { color: var(--gray-dim); }
+
+  .btn-primary {
+    font-family: var(--sans); font-size: 12px; font-weight: 600;
+    padding: 8px 18px; border-radius: 20px;
+    background: var(--white); color: var(--black); border: 1px solid var(--white);
+    cursor: pointer; transition: opacity .12s;
+  }
+  .btn-primary:hover { opacity: .85; }
+  .btn-secondary, .rst-btn {
+    font-family: var(--sans); font-size: 12px; font-weight: 500;
+    padding: 7px 16px; border-radius: 20px;
+    background: transparent; color: var(--gray); border: 1px solid var(--line);
+    cursor: pointer; transition: color .12s, border-color .12s;
+  }
+  .btn-secondary:hover, .rst-btn:hover { color: var(--white); border-color: rgba(255,255,255,.35); }
+
+  .top-nav { display: flex; gap: 6px; margin-bottom: 28px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 16px; }
+  .tnav, .vtab, .stab {
+    font-family: var(--sans); font-size: 12px; font-weight: 500;
+    padding: 6px 16px; border: 1px solid var(--line); border-radius: 20px;
+    background: transparent; cursor: pointer; color: var(--gray);
+    transition: color .12s, border-color .12s, background .12s;
+  }
+  .tnav:hover, .vtab:hover, .stab:hover { color: var(--white); border-color: rgba(255,255,255,.3); }
+  .tnav.on, .vtab.on {
+    background: var(--white); color: var(--black); border-color: var(--white);
+    font-family: var(--sans); font-weight: 600;
+  }
+  .stab.on { color: var(--white); border-color: rgba(255,255,255,.45); background: rgba(255,255,255,.07); }
+
+  .badge {
+    display: inline-block; font-family: var(--mono); font-size: 9px; font-weight: 500;
+    padding: 2px 7px; border-radius: 4px; border: 1px solid var(--line);
+    color: var(--gray); background: rgba(255,255,255,.04);
+  }
+  .badge-on { border-color: rgba(255,255,255,.2); color: var(--white); }
+
+  input[type="text"], input[type="number"], textarea, select {
+    font-family: var(--sans); font-size: 12px;
+    padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--ink); color: var(--white); outline: none;
+    transition: border-color .12s;
+  }
+  input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:focus { border-color: rgba(255,255,255,.4); }
+  input::placeholder, textarea::placeholder { color: var(--gray-dim); }
+  .filter-input { font-size: 11px; padding: 5px 12px; border-radius: 20px; width: 160px; }
+
+  .dz {
+    border: 1px dashed var(--line); border-radius: 10px; padding: 2rem 1.5rem;
+    text-align: center; cursor: pointer; background: var(--ink);
+    user-select: none; transition: border-color .15s, background .15s;
+  }
+  .dz:hover { background: var(--card); border-color: rgba(255,255,255,.28); }
+  .dz.ok { border-style: solid; border-color: var(--green); background: rgba(62,207,116,.07); }
+  .dz-title { font-family: var(--sans); font-size: 13px; font-weight: 600; color: var(--white); margin-bottom: 3px; }
+  .dz-sub   { font-family: var(--sans); font-size: 11px; color: var(--gray-dim); }
+  .upload-desc     { font-family: var(--sans); font-size: 13px; color: var(--gray); }
+  .upload-desc-sub { font-family: var(--sans); font-size: 12px; color: var(--gray-dim); }
+
+  .delta-pill { display: inline-block; font-family: var(--mono); font-size: 10px; padding: 2px 7px; border-radius: 4px; font-weight: 500; }
+  .pill-pos { background: rgba(62,207,116,.15); color: var(--green); }
+  .pill-neg { background: rgba(240,82,82,.15); color: var(--red); }
+  .pill-neu { background: rgba(255,255,255,.06); color: var(--gray-dim); }
+
+  .tbl { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .tbl thead th {
+    padding: 9px 16px; border-bottom: 1px solid var(--line);
+    color: var(--gray-dim); font-family: var(--mono);
+    font-weight: 500; font-size: 9px; text-transform: uppercase; letter-spacing: .09em;
+    text-align: left; white-space: nowrap; background: var(--ink);
+  }
+  .tbl thead th.num { text-align: right; }
+  .tbl thead th.sortable { cursor: pointer; }
+  .tbl thead th.sortable:hover { color: var(--white); }
+  .tbl tbody tr:nth-child(odd) td { background: var(--black); }
+  .tbl tbody tr:nth-child(even) td { background: var(--ink); }
+  .tbl tbody tr:hover td { background: var(--card) !important; }
+  .tbl td { padding: 10px 16px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; color: var(--white); }
+  .tbl td.num { text-align: right; font-family: var(--mono); font-size: 11px; }
+  .tbl tr:last-child td { border-bottom: none; }
+  .tbl thead th:first-child, .tbl td:first-child { position: sticky; left: 0; box-shadow: 1px 0 0 var(--line); }
+  .tbl thead th:first-child { z-index: 3; background: var(--ink); }
+  .tbl tbody tr:nth-child(odd) td:first-child { background: var(--black); }
+  .tbl tbody tr:nth-child(even) td:first-child { background: var(--ink); }
+  .tbl tbody tr:hover td:first-child { background: var(--card) !important; }
+  .sort-icon { font-size: 9px; margin-left: 3px; opacity: .3; }
+  .sort-icon.active { opacity: 1; color: var(--white); }
+  .tbl-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--line); background: var(--black); }
+  .tbl-note { font-family: var(--mono); font-size: 10px; color: var(--gray-dim); margin-top: 7px; text-align: right; }
+
+  .warn { background: rgba(200,160,0,.1); border: 1px solid rgba(200,160,0,.25); border-radius: 8px; padding: 10px 14px; font-size: 12px; font-family: var(--sans); color: #E8C840; margin-top: 10px; }
+  .err { background: rgba(240,82,82,.1); border: 1px solid rgba(240,82,82,.25); border-radius: 8px; padding: 10px 14px; font-size: 12px; font-family: var(--sans); color: var(--red); margin-top: 10px; }
+  .hint-box { font-family: var(--mono); font-size: 10px; color: var(--gray-dim); background: var(--ink); border-radius: 8px; padding: 9px 13px; margin-top: 10px; line-height: 1.9; border: 1px solid var(--line); }
+
+  @media (max-width: 600px) {
+    .g3 { grid-template-columns: repeat(2,1fr); }
+    .g2 { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -336,12 +456,15 @@ function SnapshotTab({snap}){
       <div className="card">
         <div className="slbl">Waste by Auto Type</div>
         {wasteByType.map((r,i)=>(
-          <div key={r.tp} style={{marginBottom:i<wasteByType.length-1?14:0}}>
-            <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}>
-              <span style={{display:'flex',alignItems:'center',gap:8}}><Badge v={r.tp}/><span style={{fontFamily:'var(--mono)',fontWeight:500,fontSize:13,color:'var(--white)'}}>{fmt$(r.ws)}</span></span>
+          <div key={r.tp} style={{marginBottom:i<wasteByType.length-1?18:0}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+              <span style={{display:'flex',alignItems:'center',gap:10}}>
+                <Badge v={r.tp}/>
+                <span style={{fontFamily:'var(--mono)',fontWeight:600,fontSize:14,color:'var(--red)'}}>{fmt$(r.ws)}</span>
+              </span>
               <span style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--gray-dim)'}}>{pct(r.wpct)} of waste · {pct(r.spct)} of spend</span>
             </div>
-            <div style={{height:6,background:'var(--card-2)',borderRadius:3}}><div style={{height:6,width:Math.min(r.wpct,100)+'%',background:'var(--red)',borderRadius:3}}/></div>
+            <div style={{height:8,background:'var(--card-2)',borderRadius:4}}><div style={{height:8,width:Math.min(r.wpct,100)+'%',background:'var(--red)',borderRadius:4,opacity:.8}}/></div>
           </div>
         ))}
       </div>
@@ -395,7 +518,7 @@ function WastedTab({topWasted,showType,showCampFilter,showAsinFilter=true,export
         <table className="tbl">
           <thead><tr>
             <TH l="#"           c="rank"       sc={col} sd={dir} tg={toggle} w={36}/>
-            <TH l="Campaign"    c="campaign"   sc={col} sd={dir} tg={toggle}/>
+            <TH l="Campaign"    c="campaign"   sc={col} sd={dir} tg={toggle} w={200}/>
             {showType&&<TH l="Auto type"  c="targeting"  sc={col} sd={dir} tg={toggle} w={110}/>}
             <TH l="Type"        c="termType"   sc={col} sd={dir} tg={toggle} w={80}/>
             <TH l="Search term" c="searchTerm" sc={col} sd={dir} tg={toggle}/>
@@ -407,7 +530,7 @@ function WastedTab({topWasted,showType,showCampFilter,showAsinFilter=true,export
             {sorted.map((r,i)=>(
               <tr key={i}>
                 <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--gray-dim)'}} v={r.rank}/>
-                <TD sx={{fontSize:11,color:'var(--gray)',wordBreak:'break-word'}} v={r.campaign}/>
+                <TD sx={{fontSize:11,color:'var(--gray)',maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} v={<span title={r.campaign}>{r.campaign}</span>}/>
                 {showType&&<TD v={<Badge v={r.targeting}/>}/>}
                 <TD v={<span style={{display:'inline-block',padding:'2px 7px',borderRadius:4,fontSize:10,fontWeight:500,fontFamily:'var(--mono)',border:'1px solid var(--line)',background:r.termType==='ASIN'?'rgba(62,207,116,.12)':'rgba(255,255,255,.06)',color:r.termType==='ASIN'?'var(--green)':'var(--gray)'}}>{r.termType}</span>}/>
                 <TD sx={{fontSize:12,wordBreak:'break-word',fontFamily:r.termType==='ASIN'?'var(--mono)':'inherit',color:'var(--white)'}} v={r.searchTerm}/>
@@ -464,7 +587,7 @@ function CandsTab({cands,rows,exportName}){
         <table className="tbl">
           <thead><tr>
             <TH l="#"          c="rank" sc={col} sd={dir} tg={toggle} w={32}/>
-            <TH l="Campaign"   c="camp" sc={col} sd={dir} tg={toggle}/>
+            <TH l="Campaign"   c="camp" sc={col} sd={dir} tg={toggle} w={200}/>
             <TH l="Token"      c="tok"  sc={col} sd={dir} tg={toggle} w={105}/>
             <TH l="Occ"        c="occ"  sc={col} sd={dir} tg={toggle} w={44}/>
             <TH l="0-ord"      c="o0"   sc={col} sd={dir} tg={toggle} w={48}/>
@@ -483,7 +606,7 @@ function CandsTab({cands,rows,exportName}){
                 <React.Fragment key={i}>
                   <tr onClick={()=>setExpanded(isExp?null:i)} style={{cursor:'pointer'}} title="Click to expand">
                     <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--gray-dim)'}} v={r.rank}/>
-                    <TD sx={{fontSize:11,color:'var(--gray)',wordBreak:'break-word'}} v={r.camp}/>
+                    <TD sx={{fontSize:11,color:'var(--gray)',maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} v={<span title={r.camp}>{r.camp}</span>}/>
                     <TD sx={{fontWeight:500,fontSize:12,color:'var(--white)'}} v={r.tok}/>
                     <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right',color:'var(--white)'}} v={r.occ}/>
                     <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right',color:'var(--white)'}} v={r.o0}/>
@@ -840,14 +963,14 @@ function GapAnalysisSection({strRows, brand}){
         :<div className="tbl-wrap">
           <table className="tbl">
             <thead><tr>
-              <TH l="#"                   c="rank"          sc={col} sd={dir} tg={toggle} w={32}/>
-              <TH l="Search term"         c="term"          sc={col} sd={dir} tg={toggle}/>
-              <TH l="Coverage"            c="coverage"      sc={col} sd={dir} tg={toggle} w={120}/>
-              <TH l="Orders"              c="orders"        sc={col} sd={dir} tg={toggle} w={68}/>
-              <TH l="Conv. sales"         c="sales"         sc={col} sd={dir} tg={toggle} w={90}/>
-              <TH l="ROAS"                c="roas"          sc={col} sd={dir} tg={toggle} w={72}/>
-              <TH l="Suggested"           c="suggestedMatch" sc={col} sd={dir} tg={toggle} w={100}/>
-              <TH l="Converting campaigns" c={null}         sc={col} sd={dir} tg={toggle}/>
+              <TH l="#"                    c="rank"           sc={col} sd={dir} tg={toggle} w={32}/>
+              <TH l="Search term"          c="term"           sc={col} sd={dir} tg={toggle} w={220}/>
+              <TH l="Coverage"             c="coverage"       sc={col} sd={dir} tg={toggle} w={120}/>
+              <TH l="Orders"               c="orders"         sc={col} sd={dir} tg={toggle} w={68}/>
+              <TH l="Conv. sales"          c="sales"          sc={col} sd={dir} tg={toggle} w={90}/>
+              <TH l="ROAS"                 c="roas"           sc={col} sd={dir} tg={toggle} w={72}/>
+              <TH l="Suggested"            c="suggestedMatch" sc={col} sd={dir} tg={toggle} w={100}/>
+              <TH l="Converting campaigns" c={null}           sc={col} sd={dir} tg={toggle}/>
             </tr></thead>
             <tbody>
               {sorted.map((r,i)=>{
@@ -855,13 +978,13 @@ function GapAnalysisSection({strRows, brand}){
                 return(
                   <tr key={i}>
                     <TD sx={{fontFamily:'var(--mono)',fontSize:11,color:'var(--gray-dim)'}} v={r.rank}/>
-                    <TD sx={{fontSize:12,fontWeight:500,wordBreak:'break-word',fontFamily:r.isAsin?'var(--mono)':'inherit',color:'var(--white)'}} v={r.term}/>
+                    <TD sx={{fontSize:12,fontWeight:500,fontFamily:r.isAsin?'var(--mono)':'inherit',color:'var(--white)',maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',textAlign:'left'}} v={<span title={r.term}>{r.term}</span>}/>
                     <TD v={<span style={{display:'inline-block',padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:500,fontFamily:'var(--mono)',border:'1px solid var(--line)',background:bg,color:tx,whiteSpace:'nowrap'}}>{r.coverage}</span>}/>
                     <TD sx={{fontFamily:'var(--mono)',fontSize:11,textAlign:'right',color:'var(--white)'}} v={r.orders}/>
                     <TD sx={{fontFamily:'var(--mono)',color:'var(--green)',fontWeight:500}} v={fmt$(r.sales)}/>
                     <TD sx={{fontFamily:'var(--mono)',color:'var(--white)'}} v={r.roas>0?r.roas.toFixed(2)+'×':'—'}/>
                     <TD v={<Badge v={r.suggestedMatch}/>}/>
-                    <TD sx={{fontSize:11,color:'var(--gray)',lineHeight:1.7}} v={r.campaigns.map(c=><div key={c} style={{wordBreak:'break-word'}}>{c}</div>)}/>
+                    <TD sx={{fontSize:11,color:'var(--gray)',lineHeight:1.7}} v={r.campaigns.map(c=><div key={c} style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={c}>{c}</div>)}/>
                   </tr>
                 );
               })}
@@ -926,41 +1049,82 @@ function App(){
       return runAll(rawRows,p,newCfg);
     });
   },[rawRows,brand,runAll]);
-  const handleSection=s=>{setSection(s);setTab(SECTIONS.find(x=>x.id===s).tabs[0].id);};
+  const handleSection=s=>{
+    setSection(s);
+    const sec=SECTIONS.find(x=>x.id===s);
+    if(sec.tabs.length>0) setTab(sec.tabs[0].id);
+  };
 
   // ── Upload ──
   if(step==='upload')return(
     <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:'2rem 1rem',background:'var(--black)'}}>
-      <div style={{width:'100%',maxWidth:480}}>
-        <div style={{textAlign:'center',marginBottom:28}}>
-          <div className="app-title" style={{marginBottom:10}}>Negative Mining Tool</div>
-          <div style={{fontSize:14,color:'var(--gray)',lineHeight:1.6}}>Upload a Search Term Report to surface wasted spend<br/>and actionable negation candidates.</div>
+      <div style={{width:'100%',maxWidth:460}}>
+
+        {/* header */}
+        <div style={{textAlign:'center',marginBottom:36}}>
+          <div className="app-title" style={{marginBottom:12}}>Negative Mining Tool</div>
+          <div style={{fontSize:13,color:'var(--gray)',lineHeight:1.7}}>
+            Upload a Search Term Report to surface wasted<br/>spend and actionable negation candidates.
+          </div>
         </div>
-        <div className="card" style={{padding:'24px 28px',marginBottom:12}}>
-          <div className="slbl">Brand Name</div>
-          <input
-            value={brand}
-            onChange={e=>setBrand(e.target.value)}
-            placeholder=""
-            style={{width:'100%',padding:'10px 12px',fontSize:13,border:'1px solid var(--line)',borderRadius:'var(--radius)',background:'var(--ink)',color:'var(--white)',outline:'none'}}
-          />
-          <div style={{fontSize:11,color:'var(--gray-dim)',marginTop:6}}>Used to protect brand keywords from being flagged as negatives.</div>
+
+        {/* unified card */}
+        <div className="card" style={{padding:0,overflow:'hidden'}}>
+
+          {/* brand name row */}
+          <div style={{padding:'20px 24px',borderBottom:'1px solid var(--line)'}}>
+            <div className="slbl" style={{marginBottom:6}}>Brand Name <span style={{color:'var(--gray-dim)',fontWeight:400,textTransform:'none',letterSpacing:0}}>(optional)</span></div>
+            <input
+              value={brand}
+              onChange={e=>setBrand(e.target.value)}
+              placeholder="e.g. Sand Cloud"
+              style={{width:'100%',background:'transparent',border:'none',outline:'none',fontSize:14,color:'var(--white)',padding:'2px 0',caretColor:'var(--green)'}}
+            />
+          </div>
+
+          {/* dropzone */}
+          <div
+            onDragOver={e=>{e.preventDefault();setDragging(true);}}
+            onDragLeave={()=>setDragging(false)}
+            onDrop={handleDrop}
+            onClick={()=>fileRef.current?.click()}
+            style={{
+              padding:'44px 32px 40px',
+              textAlign:'center',
+              cursor:'pointer',
+              background:dragging?'rgba(62,207,116,.05)':'transparent',
+              transition:'background .2s',
+            }}>
+            {processing ? (
+              <>
+                <div style={{color:'var(--gray)',marginBottom:16,display:'flex',justifyContent:'center',opacity:.6}}>
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-9-9"/></svg>
+                </div>
+                <div style={{fontSize:14,fontWeight:500,color:'var(--white)',marginBottom:4}}>Analyzing your report…</div>
+                <div style={{fontSize:12,color:'var(--gray-dim)'}}>This takes a few seconds</div>
+              </>
+            ) : (
+              <>
+                <div style={{color:dragging?'var(--green)':'var(--gray)',marginBottom:18,display:'flex',justifyContent:'center',transition:'color .2s'}}>
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+                  </svg>
+                </div>
+                <div style={{fontSize:15,fontWeight:600,color:'var(--white)',marginBottom:6}}>
+                  {dragging ? 'Drop to upload' : 'Drop your Search Term Report'}
+                </div>
+                <div style={{fontSize:12,color:'var(--gray-dim)',marginBottom:20}}>Supports .xlsx and .csv</div>
+                <span className="btn-secondary" style={{pointerEvents:'none',display:'inline-block'}}>Browse files</span>
+              </>
+            )}
+          </div>
         </div>
-        <div onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)} onDrop={handleDrop} onClick={()=>fileRef.current?.click()}
-          className={`dz${dragging?' ok':''}`} style={{padding:'52px 24px'}}>
-          {processing
-            ?<>
-              <div style={{color:'var(--gray)',marginBottom:12,display:'flex',justifyContent:'center'}}><IconLoader/></div>
-              <div className="dz-sub">Analyzing your report…</div>
-            </>
-            :<>
-              <div style={{color:'var(--gray)',marginBottom:14,display:'flex',justifyContent:'center'}}><IconUpload/></div>
-              <div className="dz-title">Drop your Search Term Report here</div>
-              <div className="dz-sub">Supports .xlsx and .csv · Click to browse</div>
-            </>}
+
+        {/* hint */}
+        <div style={{marginTop:16,fontSize:11,color:'var(--gray-dim)',textAlign:'center',lineHeight:1.8,fontFamily:'var(--mono)'}}>
+          Required: Campaign Name · Targeting · Match Type<br/>Customer Search Term · Spend · Sales · Orders
         </div>
         <input ref={fileRef} type="file" accept=".xlsx,.csv" style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(f)handleFile(f);}}/>
-        <div className="upload-desc-sub" style={{marginTop:14,textAlign:'center',lineHeight:1.6}}>Required: Campaign Name · Targeting · Match Type · Customer Search Term<br/>Spend · 7 Day Total Sales · 7 Day Total Orders</div>
       </div>
     </div>
   );
@@ -982,30 +1146,30 @@ function App(){
     <div style={{minHeight:'100vh',background:'var(--black)'}}>
 
       {/* top bar */}
-      <div style={{borderBottom:'1px solid var(--line)',padding:'14px 24px',display:'flex',alignItems:'center',gap:12,background:'var(--ink)',position:'sticky',top:0,zIndex:20,flexWrap:'wrap'}}>
-        <div style={{flex:1,minWidth:0}}>
-          <span className="app-title" style={{fontSize:16}}>{brand||'Negative Mining Tool'}</span>
-          <span style={{fontSize:12,color:'var(--gray)',marginLeft:10}}>{fileName}</span>
-          <span style={{fontSize:11,color:'var(--gray-dim)',marginLeft:8,fontFamily:'var(--mono)'}}>
-            {rawRows.length.toLocaleString()} rows · {autoR?fmt$(autoR.snap.wastedSp)+' Auto wasted':'no Auto rows'}
+      <div style={{borderBottom:'1px solid var(--line)',padding:'12px 24px',display:'flex',alignItems:'center',gap:12,background:'var(--ink)',position:'sticky',top:0,zIndex:20,flexWrap:'wrap'}}>
+        <div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+          <span className="app-title" style={{fontSize:15,letterSpacing:'.05em'}}>{brand||'Negative Mining Tool'}</span>
+          <span style={{fontSize:11,color:'var(--gray)',fontFamily:'var(--mono)'}}>{fileName}</span>
+          <span style={{fontSize:11,color:'var(--gray-dim)',fontFamily:'var(--mono)'}}>
+            {rawRows.length.toLocaleString()} rows · {autoR?fmt$(autoR.snap.wastedSp)+' wasted':'—'}
           </span>
         </div>
         <button onClick={()=>{setStep('upload');setResults(null);setRawRows([]);}} className="btn-secondary">New file</button>
         <button onClick={()=>setShowCfg(v=>!v)} className={showCfg?'btn-primary':'btn-secondary'}>Config</button>
       </div>
 
-      {/* section nav: Auto / Phrase / Broad / Gap analysis */}
-      <div className="top-nav" style={{padding:'16px 24px 0',marginBottom:0,borderBottom:'1px solid var(--line)',background:'var(--black)'}}>
+      {/* section nav */}
+      <div style={{display:'flex',gap:6,padding:'12px 24px',borderBottom:'1px solid var(--line)',background:'var(--black)',flexWrap:'wrap'}}>
         {SECTIONS.map(sec=>(
           <button key={sec.id} onClick={()=>handleSection(sec.id)} className={`tnav${section===sec.id?' on':''}`} style={{display:'flex',alignItems:'center',gap:7}}>
             {sec.label}
-            <span style={{fontSize:10,fontFamily:'var(--mono)',background:section===sec.id?'rgba(0,0,0,.12)':'rgba(255,255,255,.06)',padding:'1px 6px',borderRadius:10,color:section===sec.id?'var(--black)':'var(--gray-dim)'}}>{countFor(sec.id).toLocaleString()}</span>
+            <span style={{fontSize:10,fontFamily:'var(--mono)',background:section===sec.id?'rgba(0,0,0,.15)':'rgba(255,255,255,.06)',padding:'1px 6px',borderRadius:10,color:section===sec.id?'var(--black)':'var(--gray-dim)'}}>{countFor(sec.id).toLocaleString()}</span>
           </button>
         ))}
       </div>
 
-      {/* sub-tab nav — hidden for gap analysis */}
-      {curSec.tabs.length>0&&<div style={{display:'flex',gap:6,padding:'14px 24px',background:'var(--black)',borderBottom:'1px solid var(--line)',flexWrap:'wrap'}}>
+      {/* sub-tab nav */}
+      {curSec.tabs.length>0&&<div style={{display:'flex',gap:6,padding:'10px 24px',background:'var(--black)',borderBottom:'1px solid var(--line)',flexWrap:'wrap'}}>
         {curSec.tabs.map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)} className={`stab${tab===t.id?' on':''}`} style={{display:'flex',alignItems:'center',gap:6}}>
             {t.label}
@@ -1015,7 +1179,7 @@ function App(){
       </div>}
 
       {/* content */}
-      <div style={{padding:24,maxWidth:1400,margin:'0 auto'}}>
+      <div style={{padding:'24px',maxWidth:1400,margin:'0 auto',minHeight:'calc(100vh - 130px)'}}>
         {section==='auto'&&!autoR&&<Empty msg="No Auto rows found in this report."/>}
         {section==='auto'&&autoR&&tab==='snapshot'&&<SnapshotTab snap={autoR.snap}/>}
         {section==='auto'&&autoR&&tab==='wasted'  &&<WastedTab topWasted={autoR.topWasted} showType={true} showCampFilter={true} exportName="auto_wasted_terms.csv"/>}
