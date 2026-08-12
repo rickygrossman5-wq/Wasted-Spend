@@ -235,9 +235,9 @@ function normRows(data, hdrs) {
     matchType:  g(row,['match type']).toUpperCase().trim(),
     searchTerm: g(row,['customer search term','search term']),
     campaign:   g(row,['campaign name','campaign']),
-    spend:  parseFloat(g(row,['spend']))||0,
+    spend:  parseFloat(g(row,['spend','total cost']))||0,
     sales:  parseFloat(g(row,['7 day total sales','total sales','sales']))||0,
-    orders: parseFloat(g(row,['7 day total orders','total orders','orders']))||0,
+    orders: parseFloat(g(row,['7 day total orders','total orders','orders','purchases']))||0,
     clicks: parseFloat(g(row,['clicks']))||0,
   })).filter(r => r.searchTerm && r.campaign);
 }
