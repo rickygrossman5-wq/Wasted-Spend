@@ -228,6 +228,13 @@ function parseFile(file, cb) {
     rd.readAsArrayBuffer(file);
   }
 }
+// strips Excel's ="123456" formula-wrapping that some Amazon exports use to
+// protect long numeric IDs from Excel's number-formatting/scientific-notation mangling
+function cleanId(v) {
+  const s = String(v||'').trim();
+  const m = s.match(/^="?(.*?)"?$/);
+  return m ? m[1] : s;
+}
 function normRows(data, hdrs) {
   const g = (row,terms) => { const c = findCol(hdrs,terms); return c!=null ? String(row[c]||'').trim() : ''; };
   return data.map(row => ({
@@ -235,6 +242,9 @@ function normRows(data, hdrs) {
     matchType:  g(row,['match type']).toUpperCase().trim(),
     searchTerm: g(row,['customer search term','search term']),
     campaign:   g(row,['campaign name','campaign']),
+    campaignId: cleanId(g(row,['campaign id'])),
+    adGroupId:  cleanId(g(row,['ad group id'])),
+    adGroupName:g(row,['ad group name']),
     spend:  parseFloat(g(row,['spend','total cost']))||0,
     sales:  parseFloat(g(row,['7 day total sales','total sales','sales']))||0,
     orders: parseFloat(g(row,['7 day total orders','total orders','orders','purchases']))||0,
@@ -249,6 +259,87 @@ function copyToClipboard(items, onDone) {
     document.execCommand('copy'); document.body.removeChild(el);
     onDone && onDone();
   });
+}
+
+// ── Amazon Ads Bulksheet export (Sponsored Products negatives) ────────────
+// Column set + Entity/Match Type values per Amazon's Bulk Operations spec:
+//   Product, Entity, Operation, Campaign Id, Ad Group Id, State,
+//   Keyword Text, Match Type, Product Targeting Expression
+// Entity: 'Campaign Negative Keyword' (campaign-wide) or 'Negative Keyword' (ad-group scope)
+//         'Campaign Negative Product Targeting' or 'Negative Product Targeting' for ASINs
+// Match Type values are literally 'Negative Exact' / 'Negative Phrase'
+const BULK_COLS = ['Product','Entity','Operation','Campaign Id','Ad Group Id','Campaign Name (Informational only)','Ad Group Name (Informational only)','State','Keyword Text','Match Type','Product Targeting Expression'];
+
+function toBulkRow(item){
+  // item: {campaignId, campaignName, adGroupId, adGroupName, term, matchType, isAsin, scope}
+  // scope: 'auto' = use ad-group-level entity when an Ad Group Id is present; 'campaign' = always campaign-wide
+  const scope = item.scope || 'campaign';
+  const adGroupLevel = scope==='auto' && !!item.adGroupId;
+  const base = {
+    'Product':'Sponsored Products',
+    'Operation':'Create',
+    'Campaign Id': item.campaignId||'',
+    'Ad Group Id': adGroupLevel ? (item.adGroupId||'') : '',
+    'Campaign Name (Informational only)': item.campaignName||'',
+    'Ad Group Name (Informational only)': adGroupLevel ? (item.adGroupName||'') : '',
+    'State':'enabled',
+  };
+  if(item.isAsin){
+    return {...base,
+      'Entity': adGroupLevel ? 'Negative Product Targeting' : 'Campaign Negative Product Targeting',
+      'Keyword Text':'',
+      'Match Type':'',
+      'Product Targeting Expression': `asin="${item.term}"`,
+    };
+  }
+  return {...base,
+    'Entity': adGroupLevel ? 'Negative Keyword' : 'Campaign Negative Keyword',
+    'Keyword Text': item.term,
+    'Match Type': item.matchType==='EXACT' ? 'Negative Exact' : 'Negative Phrase',
+    'Product Targeting Expression':'',
+  };
+}
+
+// dedupe on (scope + campaign + ad group + term + match type) so the same
+// negative isn't submitted twice if it showed up under more than one source/section
+function downloadBulksheet(items, filename){
+  const seen = new Set();
+  const rows = [];
+  items.forEach(item=>{
+    const scope = item.scope || 'campaign';
+    const key = [scope,item.campaignId||item.campaignName,scope==='auto'?item.adGroupId:'',item.term,item.matchType,item.isAsin].join('|');
+    if(seen.has(key)) return;
+    seen.add(key);
+    rows.push(toBulkRow(item));
+  });
+  const ws = XLSX.utils.json_to_sheet(rows, {header:BULK_COLS});
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Sponsored Products');
+  XLSX.writeFile(wb, filename);
+  return rows.length;
+}
+
+// campaign name -> campaign ID lookup, built from any array of rows carrying both fields
+function campIdMapFrom(rows){
+  const m={};
+  (rows||[]).forEach(r=>{ if(r.campaignId && !m[r.campaign]) m[r.campaign]=r.campaignId; });
+  return m;
+}
+
+function BulkExportBtn({ getItems, filename, label = 'Export to Bulksheet' }){
+  const [done,setDone] = React.useState(false);
+  const handleClick = () => {
+    const items = getItems();
+    if(!items.length) return;
+    downloadBulksheet(items, filename);
+    setDone(true);
+    setTimeout(()=>setDone(false),2000);
+  };
+  return (
+    <button onClick={handleClick} className={done ? 'btn-primary' : 'btn-secondary'} style={{minWidth:160}}>
+      {done ? 'Downloaded' : label}
+    </button>
+  );
 }
 
 function CopyBtn({ getItems, label = 'Copy keywords' }) {
@@ -512,8 +603,21 @@ function WastedTab({topWasted,showType,showCampFilter,showAsinFilter=true,export
             </select>
           </>}
         </div>
-        <CopyBtn getItems={()=>sorted.map(r=>r.searchTerm)} label="Copy search terms"/>
+        <div style={{display:'flex',gap:8}}>
+          <CopyBtn getItems={()=>sorted.map(r=>r.searchTerm)} label="Copy search terms"/>
+          <BulkExportBtn
+            filename={exportName ? exportName.replace(/\.csv$/,'')+'_bulksheet.xlsx' : 'wasted_terms_bulksheet.xlsx'}
+            getItems={()=>sorted.map(r=>({
+              campaignId:r.campaignId, campaignName:r.campaign,
+              adGroupId:r.adGroupId, adGroupName:r.adGroupName,
+              term:r.searchTerm, matchType:'EXACT', isAsin:r.termType==='ASIN', scope:'auto',
+            }))}
+          />
+        </div>
       </div>
+      {rows.length>0 && !rows[0].campaignId && (
+        <div className="warn" style={{marginBottom:12}}>No Campaign ID column found in this report — exported bulksheet rows will have a blank Campaign Id and Amazon will reject the upload. Re-export the Search Term Report with Campaign ID included, or fill it in manually before uploading.</div>
+      )}
       <div className="tbl-wrap">
         <table className="tbl">
           <thead><tr>
@@ -548,6 +652,9 @@ function WastedTab({topWasted,showType,showCampFilter,showAsinFilter=true,export
 
 function CandsTab({cands,rows,exportName}){
   const camps=useMemo(()=>[...new Set(cands.map(c=>c.camp))],[cands]);
+  // campaign name -> campaign ID, for bulksheet export (candidates span potentially
+  // multiple ad groups within a campaign, so export is always at campaign scope)
+  const campIdMap=useMemo(()=>campIdMapFrom(rows),[rows]);
   const[filter,setFilter]=useState('all');
   const[expanded,setExpanded]=useState(null);
   const[expandMode,setExpandMode]=useState({});
@@ -581,8 +688,18 @@ function CandsTab({cands,rows,exportName}){
         <div style={{marginLeft:'auto',display:'flex',gap:8,alignItems:'center'}}>
           <span style={{fontSize:11,color:'var(--gray-dim)'}}>{filtered.length} shown</span>
           <CopyBtn getItems={()=>sorted.map(r=>r.tok)} label="Copy tokens"/>
+          <BulkExportBtn
+            filename={exportName ? exportName.replace(/\.csv$/,'')+'_bulksheet.xlsx' : 'negation_candidates_bulksheet.xlsx'}
+            getItems={()=>sorted.map(r=>({
+              campaignId:campIdMap[r.camp]||'', campaignName:r.camp,
+              term:r.tok, matchType:r.mr, isAsin:false, scope:'campaign',
+            }))}
+          />
         </div>
       </div>
+      {camps.length>0 && !camps.some(c=>campIdMap[c]) && (
+        <div className="warn" style={{marginBottom:12}}>No Campaign ID column found in this report — exported bulksheet rows will have a blank Campaign Id and Amazon will reject the upload. Re-export the Search Term Report with Campaign ID included, or fill it in manually before uploading.</div>
+      )}
       <div className="tbl-wrap">
         <table className="tbl">
           <thead><tr>
@@ -1142,6 +1259,32 @@ function App(){
   };
   const candFor=s=>s==='auto'?autoR?.cands?.length||0:s==='phrase'?phraseR?.cands?.length||0:broadR?.cands?.length||0;
 
+  // build one combined, deduplicated set of every negative recommendation across
+  // Auto + Phrase + Broad (wasted terms + negation candidates) for a single brand-wide upload
+  const buildAllNegativeItems=()=>{
+    const items=[];
+    const addSection=(sec, subRowsKey)=>{
+      if(!sec) return;
+      const campMap=campIdMapFrom(sec[subRowsKey]);
+      sec.topWasted.forEach(r=>items.push({
+        campaignId:r.campaignId, campaignName:r.campaign,
+        adGroupId:r.adGroupId, adGroupName:r.adGroupName,
+        term:r.searchTerm, matchType:'EXACT',
+        isAsin:ASIN_RE.test(String(r.searchTerm||'').trim()), scope:'auto',
+      }));
+      sec.cands.forEach(c=>items.push({
+        campaignId:campMap[c.camp]||'', campaignName:c.camp,
+        term:c.tok, matchType:c.mr, isAsin:false, scope:'campaign',
+      }));
+    };
+    addSection(autoR,'autoRows');
+    addSection(phraseR,'subRows');
+    addSection(broadR,'subRows');
+    return items;
+  };
+  const allNegativeCount = (autoR?autoR.topWasted.length+autoR.cands.length:0) + (phraseR?phraseR.topWasted.length+phraseR.cands.length:0) + (broadR?broadR.topWasted.length+broadR.cands.length:0);
+  const brandSlug = (brand||fileName.replace(/\.[^.]+$/,'')||'brand').trim().toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')||'brand';
+
   return(
     <div style={{minHeight:'100vh',background:'var(--black)'}}>
 
@@ -1154,6 +1297,11 @@ function App(){
             {rawRows.length.toLocaleString()} rows · {autoR?fmt$(autoR.snap.wastedSp)+' wasted':'—'}
           </span>
         </div>
+        <BulkExportBtn
+          filename={`${brandSlug}_all_negatives_bulksheet.xlsx`}
+          getItems={buildAllNegativeItems}
+          label={`Export All Negatives (${allNegativeCount})`}
+        />
         <button onClick={()=>{setStep('upload');setResults(null);setRawRows([]);}} className="btn-secondary">New file</button>
         <button onClick={()=>setShowCfg(v=>!v)} className={showCfg?'btn-primary':'btn-secondary'}>Config</button>
       </div>
